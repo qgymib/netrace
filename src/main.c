@@ -9,6 +9,8 @@
 #include <sys/ptrace.h>
 #include <sys/wait.h>
 #include <sys/syscall.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include "utils/defs.h"
 #include "utils/log.h"
 #include "utils/map.h"
@@ -22,38 +24,50 @@
  */
 // clang-format off
 #define SYSCALL_TRACING_TABLE(xx)   \
-    xx(SYS_socket,  SYSCALL_SKIP,                   SYSCALL_SKIP)                   \
-    xx(SYS_close,   SYSCALL_SKIP,                   SYSCALL_SKIP)                   \
+    xx(SYS_socket,  s_trace_syscall_socket_enter,   s_trace_syscall_socket_leave)   \
+    xx(SYS_close,   s_trace_syscall_close_enter,    SYSCALL_SKIP)                   \
     xx(SYS_connect, SYSCALL_SKIP,                   SYSCALL_SKIP)                   \
     xx(SYS_clone,   SYSCALL_SKIP,                   SYSCALL_SKIP)
 // clang-format on
 
-typedef struct prog_info
+typedef struct sock_node
 {
     ev_map_node_t node;
-    pid_t         pid;
-    int           syscall;
-    int           flag_setup : 1;
-    int           flag_syscall_enter : 1;
-} prog_info_t;
+    int           fd;     /* Return value of child's socket(). */
+    int           domain; /* Communication domain: AF_INET/AF_INET6. */
+    int           type;   /* SOCK_STREAM/SOCK_DGRAM */
+} sock_node_t;
+
+typedef struct prog_node
+{
+    ev_map_node_t node;
+    pid_t         pid;                    /* Process ID. */
+    ev_map_t      sock_map;               /* Program socket map. Type: #sock_node_t. */
+    sock_node_t*  sock_last;              /* Last socket we are tracing. */
+    int           syscall;                /* System call number. */
+    int           flag_setup : 1;         /* Is setup done. */
+    int           flag_syscall_enter : 1; /* Is entry syscall. */
+} prog_node_t;
 
 typedef struct runtime
 {
     char*    socks5_addr; /* Socks5 address. */
     unsigned socks5_port; /* Socks5 port. */
 
+    int                tcp_listen_fd; /* TCP socket. */
+    int                udp_listen_fd; /* UDP socket. */
+    struct sockaddr_in listen_addr;   /* Listen address. */
+
     char**   prog_args;    /* Arguments for child program, ending with NULL. */
     pid_t    prog_pid;     /* First child pid. */
     int      prog_pipe[2]; /* [0] for read, [1] for write. */
-    ev_map_t prog_map;
+    ev_map_t prog_map;     /* Program tracing map. Type: #prog_node_t. */
 } runtime_t;
-
-extern char** environ;
 
 /**
  * @brief Global runtime.
  */
-static runtime_t* _G = NULL;
+static runtime_t* G = NULL;
 
 // clang-format off
 static const char* s_help =
@@ -69,85 +83,109 @@ CMAKE_PROJECT_NAME " - Trace and redirect network traffic (" CMAKE_PROJECT_VERSI
 ;
 // clang-format on
 
+static void s_prog_node_release(prog_node_t* node)
+{
+    ev_map_node_t* it = ev_map_begin(&node->sock_map);
+    while (it != NULL)
+    {
+        sock_node_t* sock = container_of(it, sock_node_t, node);
+        it = ev_map_next(it);
+        ev_map_erase(&node->sock_map, &sock->node);
+        free(sock);
+    }
+
+    free(node);
+}
+
 static void _at_exit(void)
 {
-    if (_G == NULL)
+    if (G == NULL)
     {
         return;
     }
 
-    ev_map_node_t* it = ev_map_begin(&_G->prog_map);
+    ev_map_node_t* it = ev_map_begin(&G->prog_map);
     while (it != NULL)
     {
-        prog_info_t* info = container_of(it, prog_info_t, node);
+        prog_node_t* info = container_of(it, prog_node_t, node);
         it = ev_map_next(it);
-        free(info);
+        s_prog_node_release(info);
     }
-    if (_G->prog_args != NULL)
+    if (G->tcp_listen_fd >= 0)
+    {
+        close(G->tcp_listen_fd);
+        G->tcp_listen_fd = -1;
+    }
+    if (G->udp_listen_fd >= 0)
+    {
+        close(G->udp_listen_fd);
+        G->udp_listen_fd = -1;
+    }
+    if (G->prog_args != NULL)
     {
         size_t i;
-        for (i = 0; _G->prog_args[i] != NULL; i++)
+        for (i = 0; G->prog_args[i] != NULL; i++)
         {
-            free(_G->prog_args[i]);
-            _G->prog_args[i] = NULL;
+            free(G->prog_args[i]);
+            G->prog_args[i] = NULL;
         }
-        free(_G->prog_args);
-        _G->prog_args = NULL;
+        free(G->prog_args);
+        G->prog_args = NULL;
     }
-    if (_G->socks5_addr != NULL)
+    if (G->socks5_addr != NULL)
     {
-        free(_G->socks5_addr);
-        _G->socks5_addr = NULL;
+        free(G->socks5_addr);
+        G->socks5_addr = NULL;
     }
-    if (_G->prog_pipe[0] >= 0)
+    if (G->prog_pipe[0] >= 0)
     {
-        close(_G->prog_pipe[0]);
-        _G->prog_pipe[0] = -1;
+        close(G->prog_pipe[0]);
+        G->prog_pipe[0] = -1;
     }
-    if (_G->prog_pipe[1] >= 0)
+    if (G->prog_pipe[1] >= 0)
     {
-        close(_G->prog_pipe[1]);
-        _G->prog_pipe[1] = -1;
+        close(G->prog_pipe[1]);
+        G->prog_pipe[1] = -1;
     }
 
-    free(_G);
-    _G = NULL;
+    free(G);
+    G = NULL;
 }
 
 static void s_setup_cmdline_append_prog_args(const char* arg)
 {
     /* The first argument. */
-    if (_G->prog_args == NULL)
+    if (G->prog_args == NULL)
     {
-        if ((_G->prog_args = (char**)malloc(sizeof(char*) * 2)) == NULL)
+        if ((G->prog_args = (char**)malloc(sizeof(char*) * 2)) == NULL)
         {
             LOG_F_ABORT("%s", strerror(ENOMEM));
         }
-        if ((_G->prog_args[0] = strdup(arg)) == NULL)
+        if ((G->prog_args[0] = strdup(arg)) == NULL)
         {
             LOG_F_ABORT("%s", strerror(ENOMEM));
         }
-        _G->prog_args[1] = NULL;
+        G->prog_args[1] = NULL;
         return;
     }
 
     /* More arguments. */
     size_t prog_nargs = 0;
-    while (_G->prog_args[prog_nargs] != NULL)
+    while (G->prog_args[prog_nargs] != NULL)
     {
         prog_nargs++;
     }
-    char** new_args = realloc(_G->prog_args, sizeof(char*) * (prog_nargs + 2));
+    char** new_args = realloc(G->prog_args, sizeof(char*) * (prog_nargs + 2));
     if (new_args == NULL)
     {
         LOG_F_ABORT("%s", strerror(ENOMEM));
     }
-    _G->prog_args = new_args;
-    if ((_G->prog_args[prog_nargs] = strdup(arg)) == NULL)
+    G->prog_args = new_args;
+    if ((G->prog_args[prog_nargs] = strdup(arg)) == NULL)
     {
         LOG_F_ABORT("%s", strerror(ENOMEM));
     }
-    _G->prog_args[prog_nargs + 1] = NULL;
+    G->prog_args[prog_nargs + 1] = NULL;
 }
 
 static const char* s_strrstr(const char* haystack, const char* needle)
@@ -174,12 +212,12 @@ static const char* s_strrstr(const char* haystack, const char* needle)
 
 static void s_setup_cmdline_socks5_addr(const char* value)
 {
-    free(_G->socks5_addr);
-    if ((_G->socks5_addr = strdup(value)) == NULL)
+    free(G->socks5_addr);
+    if ((G->socks5_addr = strdup(value)) == NULL)
     {
         LOG_F_ABORT("%s", strerror(ENOMEM));
     }
-    _G->socks5_port = NT_DEFAULT_SOCKS5_PORT;
+    G->socks5_port = NT_DEFAULT_SOCKS5_PORT;
 }
 
 static void s_setup_cmdline_socks5(const char* value)
@@ -200,8 +238,8 @@ static void s_setup_cmdline_socks5(const char* value)
     /* Only port. */
     if (pos == value)
     {
-        free(_G->socks5_addr);
-        if ((_G->socks5_addr = strdup(NT_DEFAULT_SOCKS5_ADDR)) == NULL)
+        free(G->socks5_addr);
+        if ((G->socks5_addr = strdup(NT_DEFAULT_SOCKS5_ADDR)) == NULL)
         {
             LOG_F_ABORT("%s", strerror(ENOMEM));
         }
@@ -215,16 +253,16 @@ static void s_setup_cmdline_socks5(const char* value)
     }
 
     size_t addrlen = pos - value;
-    free(_G->socks5_addr);
-    if ((_G->socks5_addr = malloc(addrlen + 1)) == NULL)
+    free(G->socks5_addr);
+    if ((G->socks5_addr = malloc(addrlen + 1)) == NULL)
     {
         LOG_F_ABORT("%s", strerror(ENOMEM));
     }
-    memcpy(_G->socks5_addr, value, addrlen);
-    _G->socks5_addr[addrlen] = '\0';
+    memcpy(G->socks5_addr, value, addrlen);
+    G->socks5_addr[addrlen] = '\0';
 
 PARSER_PORT:
-    if (sscanf(pos + 1, "%u", &_G->socks5_port) != 1)
+    if (sscanf(pos + 1, "%u", &G->socks5_port) != 1)
     {
         goto ERR_INVALID_PORT;
     }
@@ -276,18 +314,18 @@ static void s_setup_cmdline(int argc, char* argv[])
         }
     }
 
-    if (_G->prog_args == NULL)
+    if (G->prog_args == NULL)
     {
         LOG_E("Missing program path");
         exit(EXIT_FAILURE);
     }
-    if (_G->socks5_addr == NULL)
+    if (G->socks5_addr == NULL)
     {
-        if ((_G->socks5_addr = strdup(NT_DEFAULT_SOCKS5_ADDR)) == NULL)
+        if ((G->socks5_addr = strdup(NT_DEFAULT_SOCKS5_ADDR)) == NULL)
         {
             LOG_F_ABORT("%s", strerror(ENOMEM));
         }
-        _G->socks5_port = NT_DEFAULT_SOCKS5_PORT;
+        G->socks5_port = NT_DEFAULT_SOCKS5_PORT;
     }
 }
 
@@ -296,14 +334,14 @@ static int do_child()
     int code = 0;
 
     /* Close the read end of the pipe. s*/
-    close(_G->prog_pipe[0]);
-    _G->prog_pipe[0] = -1;
+    close(G->prog_pipe[0]);
+    G->prog_pipe[0] = -1;
 
     /* Setup trace. */
     if (ptrace(PTRACE_TRACEME, 0, NULL, NULL) < 0)
     {
         code = errno;
-        write(_G->prog_pipe[1], &code, sizeof(code));
+        write(G->prog_pipe[1], &code, sizeof(code));
     }
 
     /*
@@ -312,16 +350,16 @@ static int do_child()
      * 1. Stop and raise `SIGTRAP` to parent.
      * 2. Close pipe.
      */
-    if (execvp(_G->prog_args[0], _G->prog_args) < 0)
+    if (execvp(G->prog_args[0], G->prog_args) < 0)
     {
         code = errno;
-        write(_G->prog_pipe[1], &code, sizeof(code));
+        write(G->prog_pipe[1], &code, sizeof(code));
     }
 
     return EXIT_FAILURE;
 }
 
-static void s_trace_setup(prog_info_t* info)
+static void s_trace_setup(prog_node_t* info)
 {
     info->flag_setup = 1;
 
@@ -333,16 +371,16 @@ static void s_trace_setup(prog_info_t* info)
     }
 }
 
-static prog_info_t* s_find_proc(pid_t pid)
+static prog_node_t* s_find_proc(pid_t pid)
 {
-    prog_info_t tmp;
+    prog_node_t tmp;
     tmp.pid = pid;
-    ev_map_node_t* it = ev_map_find(&_G->prog_map, &tmp.node);
+    ev_map_node_t* it = ev_map_find(&G->prog_map, &tmp.node);
     if (it == NULL)
     {
         return NULL;
     }
-    return container_of(it, prog_info_t, node);
+    return container_of(it, prog_node_t, node);
 }
 
 static void s_check_child_exit_reason(void)
@@ -351,7 +389,7 @@ static void s_check_child_exit_reason(void)
     ssize_t read_sz = 0;
     do
     {
-        read_sz = read(_G->prog_pipe[0], &code, sizeof(code));
+        read_sz = read(G->prog_pipe[0], &code, sizeof(code));
     } while (read_sz < 0 && errno == EINTR);
 
     /* There are error from child process, probably because invalid program path. */
@@ -367,10 +405,59 @@ static void s_check_child_exit_reason(void)
         LOG_F_ABORT("Pipe error: (%d) %s.", errno, strerror(errno));
     }
 
-    /* Pipe closed, child exec success. */
+    /* Pipe closed, child exec() success. */
 }
 
-static void s_trace_syscall(prog_info_t* info)
+static void s_trace_syscall_socket_enter(prog_node_t* prog)
+{
+    sock_node_t* sock = calloc(1, sizeof(sock_node_t));
+    sock->fd = -1;
+    sock->domain = nt_get_syscall_arg(prog->pid, 0);
+    sock->type = nt_get_syscall_arg(prog->pid, 1);
+
+    if (ev_map_insert(&prog->sock_map, &sock->node) != NULL)
+    {
+        LOG_F_ABORT("Conflict node: pid=%d, fd=%d.", prog->pid, sock->fd);
+    }
+    prog->sock_last = sock;
+}
+
+static void s_trace_syscall_socket_leave(prog_node_t* prog)
+{
+    sock_node_t* sock = prog->sock_last;
+    prog->sock_last = NULL;
+
+    /* Update fd. */
+    ev_map_erase(&prog->sock_map, &sock->node);
+    {
+        sock->fd = nt_get_syscall_ret(prog->pid);
+    }
+    if (ev_map_insert(&prog->sock_map, &sock->node) != NULL)
+    {
+        LOG_F_ABORT("Conflict node: pid=%d, fd=%d.", prog->pid, sock->fd);
+    }
+
+    LOG_D("socket=%d", sock->fd);
+}
+
+static void s_trace_syscall_close_enter(prog_node_t* prog)
+{
+    sock_node_t tmp;
+    tmp.fd = nt_get_syscall_arg(prog->pid, 0);
+    ev_map_node_t* it = ev_map_find(&prog->sock_map, &tmp.node);
+    if (it == NULL)
+    {
+        return;
+    }
+
+    sock_node_t* sock = container_of(it, sock_node_t, node);
+    LOG_D("close=%d", sock->fd);
+
+    ev_map_erase(&prog->sock_map, &sock->node);
+    free(sock);
+}
+
+static void s_trace_syscall(prog_node_t* info)
 {
     if (!info->flag_syscall_enter)
     {
@@ -403,9 +490,31 @@ static void s_trace_syscall(prog_info_t* info)
     }
 }
 
+static int s_on_cmp_sock(const ev_map_node_t* key1, const ev_map_node_t* key2, void* arg)
+{
+    (void)arg;
+    const sock_node_t* n1 = container_of(key1, sock_node_t, node);
+    const sock_node_t* n2 = container_of(key2, sock_node_t, node);
+    return n1->fd - n2->fd;
+}
+
+static prog_node_t* s_prog_node_save(pid_t pid)
+{
+    prog_node_t* info = calloc(1, sizeof(prog_node_t));
+    if (info == NULL)
+    {
+        LOG_F_ABORT("%s", strerror(ENOMEM));
+    }
+    info->pid = pid;
+    ev_map_init(&info->sock_map, s_on_cmp_sock, NULL);
+
+    ev_map_insert(&G->prog_map, &info->node);
+    return info;
+}
+
 static void do_trace()
 {
-    while (ev_map_size(&_G->prog_map) != 0)
+    while (ev_map_size(&G->prog_map) != 0)
     {
         int   status = 0;
         pid_t pid = wait(&status);
@@ -414,22 +523,20 @@ static void do_trace()
             break;
         }
 
-        prog_info_t* info = s_find_proc(pid);
+        prog_node_t* info = s_find_proc(pid);
         if (info == NULL)
         { /* New grandchild incoming. */
-            info = calloc(1, sizeof(*info));
-            info->pid = pid;
-            ev_map_insert(&_G->prog_map, &info->node);
+            info = s_prog_node_save(pid);
         }
 
         if (WIFEXITED(status) || WIFSIGNALED(status) || !WIFSTOPPED(status))
         {
-            if (pid == _G->prog_pid)
+            if (pid == G->prog_pid)
             {
                 s_check_child_exit_reason();
             }
 
-            ev_map_erase(&_G->prog_map, &info->node);
+            ev_map_erase(&G->prog_map, &info->node);
             free(info);
             LOG_D("PID=%d exit", pid);
             continue;
@@ -455,22 +562,60 @@ static void do_trace()
     }
 }
 
-static int do_parent()
+static void s_init_net_service(void)
+{
+    if ((G->tcp_listen_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+    {
+        LOG_F_ABORT("socket() failed: (%d) %s.", errno, strerror(errno));
+    }
+    if ((G->udp_listen_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
+    {
+        LOG_F_ABORT("socket() failed: (%d) %s.", errno, strerror(errno));
+    }
+
+    /* Bind to random port. */
+    G->listen_addr.sin_family = AF_INET;
+    G->listen_addr.sin_port = htons(0);
+    inet_pton(AF_INET, "127.0.0.1", &G->listen_addr.sin_addr);
+    if (bind(G->tcp_listen_fd, (struct sockaddr*)&G->listen_addr, sizeof(G->listen_addr)) < 0)
+    {
+        LOG_F_ABORT("bind() failed: (%d) %s.", errno, strerror(errno));
+    }
+
+    /* Get actual bind address. */
+    socklen_t addrlen = sizeof(G->listen_addr);
+    if (getsockname(G->tcp_listen_fd, (struct sockaddr*)&G->listen_addr, &addrlen) < 0)
+    {
+        LOG_F_ABORT("getsockname() failed: (%d) %s.", errno, strerror(errno));
+    }
+
+    /* Bind udp to same port. */
+    if (bind(G->udp_listen_fd, (struct sockaddr*)&G->listen_addr, sizeof(G->listen_addr)) < 0)
+    {
+        LOG_F_ABORT("bind() failed: (%d) %s.", errno, strerror(errno));
+    }
+
+    LOG_I("mix port %d.", ntohs(G->listen_addr.sin_port));
+}
+
+static int do_parent(void)
 {
     /* Close the write end of the pipe. */
-    close(_G->prog_pipe[1]);
-    _G->prog_pipe[1] = -1;
+    close(G->prog_pipe[1]);
+    G->prog_pipe[1] = -1;
+
+    s_init_net_service();
 
     /* Trace child. */
     do_trace();
     return 0;
 }
 
-static int s_on_cmp_map(const ev_map_node_t* key1, const ev_map_node_t* key2, void* arg)
+static int s_on_cmp_prog(const ev_map_node_t* key1, const ev_map_node_t* key2, void* arg)
 {
     (void)arg;
-    const prog_info_t* info1 = container_of(key1, prog_info_t, node);
-    const prog_info_t* info2 = container_of(key2, prog_info_t, node);
+    const prog_node_t* info1 = container_of(key1, prog_node_t, node);
+    const prog_node_t* info2 = container_of(key2, prog_node_t, node);
     if (info1->pid == info2->pid)
     {
         return 0;
@@ -484,40 +629,36 @@ int main(int argc, char* argv[])
     atexit(_at_exit);
 
     /* Initialize global runtime. */
-    if ((_G = calloc(1, sizeof(*_G))) == NULL)
+    if ((G = calloc(1, sizeof(*G))) == NULL)
     {
         LOG_F_ABORT("%s", strerror(ENOMEM));
     }
-    _G->prog_pid = -1;
-    _G->prog_pipe[0] = -1;
-    _G->prog_pipe[1] = -1;
-    ev_map_init(&_G->prog_map, s_on_cmp_map, NULL);
+    G->tcp_listen_fd = -1;
+    G->udp_listen_fd = -1;
+    G->prog_pid = -1;
+    G->prog_pipe[0] = -1;
+    G->prog_pipe[1] = -1;
+    ev_map_init(&G->prog_map, s_on_cmp_prog, NULL);
     s_setup_cmdline(argc, argv);
 
     /* Setup pipe between parent and child, to see if there are any error before executing program. */
-    if (pipe2(_G->prog_pipe, O_CLOEXEC) < 0)
+    if (pipe2(G->prog_pipe, O_CLOEXEC) < 0)
     {
         LOG_F_ABORT("pipe2() failed: (%d) %s.", errno, strerror(errno));
     }
 
-    if ((_G->prog_pid = fork()) < 0)
+    if ((G->prog_pid = fork()) < 0)
     {
         int code = errno;
         LOG_F_ABORT("fork() failed: (%d) %s.", code, strerror(code));
     }
-    if (_G->prog_pid == 0)
+    if (G->prog_pid == 0)
     {
         return do_child();
     }
 
     /* Save record */
-    prog_info_t* info = calloc(1, sizeof(prog_info_t));
-    if (info == NULL)
-    {
-        LOG_F_ABORT("%s", strerror(ENOMEM));
-    }
-    info->pid = _G->prog_pid;
-    ev_map_insert(&_G->prog_map, &info->node);
+    s_prog_node_save(G->prog_pid);
 
     return do_parent();
 }

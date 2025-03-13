@@ -5,9 +5,9 @@
 #include "utils/defs.h"
 #include "syscall.h"
 
-int nt_get_syscall_id(pid_t pid)
+long nt_get_syscall_id(pid_t pid)
 {
-    int  offset = offsetof(struct user, regs.orig_rax);
+    int offset = offsetof(struct user, regs.orig_rax);
 
     errno = 0;
     long val = ptrace(PTRACE_PEEKUSER, pid, offset);
@@ -33,6 +33,16 @@ long nt_get_syscall_arg(pid_t pid, size_t idx)
 
     errno = 0;
     long retval = ptrace(PTRACE_PEEKUSER, pid, offset[idx]);
+    assert(errno == 0);
+    return retval;
+}
+
+long nt_get_syscall_ret(pid_t pid)
+{
+    int offset = offsetof(struct user, regs.rax);
+
+    errno = 0;
+    long retval = ptrace(PTRACE_PEEKUSER, pid, offset);
     assert(errno == 0);
     return retval;
 }
