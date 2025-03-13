@@ -1,0 +1,12 @@
+#ifndef NT_CONFIG_H
+#define NT_CONFIG_H
+
+#ifndef NT_DEFAULT_SOCKS5_ADDR
+#define NT_DEFAULT_SOCKS5_ADDR "127.0.0.1"
+#endif
+
+#ifndef NT_DEFAULT_SOCKS5_PORT
+#define NT_DEFAULT_SOCKS5_PORT 1080
+#endif
+
+#endif
