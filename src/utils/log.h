@@ -6,6 +6,7 @@
 
 #define LOG_D(fmt, ...) nt_log(NT_LOG_DEBUG, __FILE__, __FUNCTION__, __LINE__, fmt, ##__VA_ARGS__)
 #define LOG_I(fmt, ...) nt_log(NT_LOG_INFO, __FILE__, __FUNCTION__, __LINE__, fmt, ##__VA_ARGS__)
+#define LOG_W(fmt, ...) nt_log(NT_LOG_WARN, __FILE__, __FUNCTION__, __LINE__, fmt, ##__VA_ARGS__)
 #define LOG_E(fmt, ...) nt_log(NT_LOG_ERROR, __FILE__, __FUNCTION__, __LINE__, fmt, ##__VA_ARGS__)
 
 /**
@@ -29,6 +30,7 @@ typedef enum nt_log_level
     NT_LOG_TRACE,
     NT_LOG_DEBUG,
     NT_LOG_INFO,
+    NT_LOG_WARN,
     NT_LOG_ERROR,
     NT_LOG_FATAL,
 } nt_log_level_t;

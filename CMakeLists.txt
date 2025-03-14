@@ -3,6 +3,12 @@ project(netrace
     VERSION 0.0.1
 )
 
+option(NT_ENABLE_ASAN "Enable AddressSanitizer" OFF)
+if (NT_ENABLE_ASAN)
+    add_compile_options(-fsanitize=address)
+    add_link_options(-fsanitize=address)
+endif()
+
 ###############################################################################
 # Support functions
 ###############################################################################
@@ -15,31 +21,36 @@ function(setup_target_wall name)
 endfunction()
 
 ###############################################################################
-# Setup library
+# Setup library and executable file
 ###############################################################################
 
-set(cio_sources
-    "cio.c"
-)
-
-add_executable(${PROJECT_NAME}
+add_library(lib${PROJECT_NAME} STATIC
+    "src/runtime/__init__.c"
+    "src/runtime/proxy.c"
+    "src/utils/list.c"
     "src/utils/log.c"
     "src/utils/map.c"
+    "src/utils/memory.c"
+    "src/utils/socket.c"
+    "src/utils/str.c"
     "src/utils/syscall.c"
-    "src/main.c"
 )
-setup_target_wall(${PROJECT_NAME})
-
-target_include_directories(${PROJECT_NAME}
-    PRIVATE
+setup_target_wall(lib${PROJECT_NAME})
+target_include_directories(lib${PROJECT_NAME}
+    PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
-
-target_compile_options(${PROJECT_NAME}
-    PRIVATE
+target_compile_options(lib${PROJECT_NAME}
+    PUBLIC
         -DCMAKE_PROJECT_NAME="${CMAKE_PROJECT_NAME}"
         -DCMAKE_PROJECT_VERSION="${CMAKE_PROJECT_VERSION}"
 )
+
+add_executable(${PROJECT_NAME}
+    "src/main.c"
+)
+setup_target_wall(${PROJECT_NAME})
+target_link_libraries(${PROJECT_NAME} PRIVATE lib${PROJECT_NAME})
 
 ###############################################################################
 # Build test

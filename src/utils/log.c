@@ -3,7 +3,7 @@
 
 #include <stdarg.h>
 
-static const char* s_log_str[] = { "T", "D", "I", "E", "F" };
+static const char* s_log_str[] = { "T", "D", "I", "W", "E", "F" };
 
 static const char* s_basename(const char* path)
 {
