@@ -6,6 +6,7 @@
 #include "utils/log.h"
 #include "utils/memory.h"
 #include "utils/str.h"
+#include "socks5.h"
 #include "config.h"
 #include "__init__.h"
 
@@ -250,4 +251,9 @@ void nt_runtime_cleanup(void)
 
     nt_free(G);
     G = NULL;
+}
+
+int nt_proxy_create(nt_proxy_t** proxy, const char* url)
+{
+    return nt_proxy_socks5_create(proxy, url);
 }

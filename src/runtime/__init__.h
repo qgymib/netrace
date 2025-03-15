@@ -28,6 +28,22 @@ typedef struct prog_node
     int           flag_syscall_enter : 1; /* Is entry syscall. */
 } prog_node_t;
 
+typedef struct nt_proxy
+{
+    /**
+     * @brief Release this object.
+     * @param[in] thiz  Object handle.
+     */
+    void (*release)(struct nt_proxy* thiz);
+
+    /**
+     * @brief Queue next incoming connection address.
+     * @param[in] thiz  Object handle.
+     * @param[in] addr  Peer address.
+     */
+    void (*queue)(struct nt_proxy* thiz, struct sockaddr* addr);
+} nt_proxy_t;
+
 typedef struct runtime
 {
     char*    socks5_addr; /* Socks5 address. */
@@ -74,6 +90,14 @@ void nt_prog_node_release(prog_node_t* prog);
  * @param[in] prog Program node.
  */
 void nt_sock_node_release(sock_node_t* sock);
+
+/**
+ * @brief Create a proxy object.
+ * @param[out] proxy Proxy object.
+ * @param[in] url Url.
+ * @return 0 if success, errno if failed.
+ */
+int nt_proxy_create(nt_proxy_t** proxy, const char* url);
 
 #ifdef __cplusplus
 }

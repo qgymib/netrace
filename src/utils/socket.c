@@ -132,3 +132,9 @@ ssize_t nt_write(int fd, const char* buf, size_t size)
     } while (write_sz == -1 && errno == EINTR);
     return write_sz;
 }
+
+void nt_sockaddr_copy(struct sockaddr* dst, const struct sockaddr* src)
+{
+    size_t copy_sz = src->sa_family == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
+    memcpy(dst, src, copy_sz);
+}
