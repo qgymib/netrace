@@ -309,7 +309,7 @@ static void s_socks5_handle_tcp_accept(nt_proxy_socks5_t* socks5, int listen_fd)
     if (ret < 0)
     {
         ret = errno;
-        if (ret != EAGAIN)
+        if (ret != EAGAIN && ret != EINPROGRESS)
         {
             s_socks5_channel_release(socks5, channel);
             LOG_I("Connect peer failed: (%d) %s.", ret, strerror(ret));
@@ -328,16 +328,16 @@ static void s_socks5_handle_tcp_accept(nt_proxy_socks5_t* socks5, int listen_fd)
 
     /* We support USERNAME/PASSWORD. */
     channel->ubuf_sz = 4;
-    channel->ubuf[0] = 5; // socks5
-    channel->ubuf[1] = 2; // NMETHODS
-    channel->ubuf[2] = 0; // NO AUTHENTICATION REQUIRED
-    channel->ubuf[3] = 2; // USERNAME/PASSWORD
+    channel->ubuf[0] = 0x05; // socks5
+    channel->ubuf[1] = 0x02; // NMETHODS
+    channel->ubuf[2] = 0x00; // NO AUTHENTICATION REQUIRED
+    channel->ubuf[3] = 0x02; // USERNAME/PASSWORD
 
     /* Remove USERNAME/PASSWORD. */
     if (socks5->server_username == NULL)
     {
         channel->ubuf_sz = 3;
-        channel->ubuf[1] = 1;
+        channel->ubuf[1] = 0x01;
     }
 }
 
@@ -360,6 +360,8 @@ static void s_socks5_handle_stage_init_w(nt_proxy_socks5_t* socks5, socks5_chann
 
     channel->outbound.event.events = EPOLLIN;
     epoll_ctl(socks5->epollfd, EPOLL_CTL_MOD, channel->outbound.event.data.fd, &channel->outbound.event);
+
+    LOG_D("identifier/method selection sent.");
 }
 
 /**
@@ -382,6 +384,33 @@ static void s_socks5_handle_stage_init_setup_auth_info(nt_proxy_socks5_t* socks5
     channel->ubuf_sz += password_sz;
 }
 
+static void s_socks5_handle_stage_setup_connect(nt_proxy_socks5_t* socks5, socks5_channel_t* channel)
+{
+    channel->stage = SOCKS5_CONNECT;
+    channel->outbound.event.events = EPOLLOUT;
+    epoll_ctl(socks5->epollfd, EPOLL_CTL_MOD, channel->outbound.event.data.fd, &channel->outbound.event);
+
+    channel->ubuf[0] = 0x05;
+    channel->ubuf[1] = 0x01;
+    channel->ubuf[2] = 0x00;
+    if (channel->peeraddr.ss_family == AF_INET)
+    {
+        struct sockaddr_in* addr = (struct sockaddr_in*)&channel->peeraddr;
+        channel->ubuf[3] = 0x01;
+        memcpy(&channel->ubuf[4], &addr->sin_addr, 4);
+        memcpy(&channel->ubuf[8], &addr->sin_port, 2);
+        channel->ubuf_sz = 10;
+    }
+    else
+    {
+        struct sockaddr_in6* addr = (struct sockaddr_in6*)&channel->peeraddr;
+        channel->ubuf[3] = 0x04;
+        memcpy(&channel->ubuf[4], &addr->sin6_addr, 16);
+        memcpy(&channel->ubuf[20], &addr->sin6_port, 2);
+        channel->ubuf_sz = 22;
+    }
+}
+
 static void s_socks5_handle_stage_init_r(nt_proxy_socks5_t* socks5, socks5_channel_t* channel)
 {
     uint8_t* buf = channel->dbuf + channel->dbuf_sz;
@@ -389,6 +418,7 @@ static void s_socks5_handle_stage_init_r(nt_proxy_socks5_t* socks5, socks5_chann
     ssize_t  read_sz = nt_read(channel->outbound.event.data.fd, buf, bufsz);
     if (read_sz == 0)
     { /* Peer close. */
+        LOG_I("socks5 server close connection.");
         s_socks5_close_inbound_outbound(socks5, channel);
         return;
     }
@@ -398,6 +428,7 @@ static void s_socks5_handle_stage_init_r(nt_proxy_socks5_t* socks5, socks5_chann
         { /* Try again.*/
             return;
         }
+        LOG_I("socks5 read failed: (%d) %s.", errno, strerror(errno));
         s_socks5_close_inbound_outbound(socks5, channel);
         return;
     }
@@ -411,7 +442,7 @@ static void s_socks5_handle_stage_init_r(nt_proxy_socks5_t* socks5, socks5_chann
     switch (channel->dbuf[1])
     {
     case 0x00: /* NO AUTHENTICATION REQUIRED */
-        channel->stage = SOCKS5_FINISH;
+        s_socks5_handle_stage_setup_connect(socks5, channel);
         break;
     case 0x02: /*USERNAME/PASSWORD*/
         channel->stage = SOCKS5_AUTH;
@@ -503,29 +534,7 @@ static void s_socks5_handle_stage_auth_r(nt_proxy_socks5_t* socks5, socks5_chann
     }
 
     /* Change state. */
-    channel->stage = SOCKS5_CONNECT;
-    channel->outbound.event.events = EPOLLOUT;
-    epoll_ctl(socks5->epollfd, EPOLL_CTL_MOD, channel->outbound.event.data.fd, &channel->outbound.event);
-
-    channel->ubuf[0] = 0x05;
-    channel->ubuf[1] = 0x01;
-    channel->ubuf[2] = 0x00;
-    if (channel->peeraddr.ss_family == AF_INET)
-    {
-        struct sockaddr_in* addr = (struct sockaddr_in*)&channel->peeraddr;
-        channel->ubuf[3] = 0x01;
-        memcpy(&channel->ubuf[4], &addr->sin_addr, 4);
-        memcpy(&channel->ubuf[8], &addr->sin_port, 2);
-        channel->ubuf_sz = 10;
-    }
-    else
-    {
-        struct sockaddr_in6* addr = (struct sockaddr_in6*)&channel->peeraddr;
-        channel->ubuf[3] = 0x04;
-        memcpy(&channel->ubuf[4], &addr->sin6_addr, 16);
-        memcpy(&channel->ubuf[20], &addr->sin6_port, 2);
-        channel->ubuf_sz = 22;
-    }
+    s_socks5_handle_stage_setup_connect(socks5, channel);
 
     channel->dbuf_sz -= 2;
     if (channel->dbuf_sz != 0)
@@ -995,7 +1004,9 @@ static int s_socks5_on_cmp_sock(const ev_map_node_t* key1, const ev_map_node_t* 
 static struct sockaddr* s_socks5_listen_addr(struct nt_proxy* thiz, int domain, int type)
 {
     nt_proxy_socks5_t* socks5 = container_of(thiz, nt_proxy_socks5_t, basis);
-    if (type == SOCK_DGRAM)
+
+    /*  Since  Linux  2.6.27, the type argument may include bitwise OR. So we remove it. */
+    if ((type & 0xFF) == SOCK_DGRAM)
     {
         return NULL;
     }

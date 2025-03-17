@@ -36,7 +36,7 @@ static int do_child()
 {
     int code = 0;
 
-    /* Close the read end of the pipe. s*/
+    /* Close the read end of the pipe. */
     close(G->prog_pipe[0]);
     G->prog_pipe[0] = -1;
 
