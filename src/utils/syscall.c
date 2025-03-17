@@ -17,7 +17,7 @@ long nt_get_syscall_id(pid_t pid)
     int offset = offsetof(struct user, regs.orig_rax);
 
     errno = 0;
-    long val = ptrace(PTRACE_PEEKUSER, pid, offset);
+    long val = ptrace(PTRACE_PEEKUSER, pid, offset, NULL);
     assert(errno == 0);
 
     return val;
@@ -39,7 +39,7 @@ long nt_get_syscall_arg(pid_t pid, size_t idx)
     // clang-format on
 
     errno = 0;
-    long retval = ptrace(PTRACE_PEEKUSER, pid, offset[idx]);
+    long retval = ptrace(PTRACE_PEEKUSER, pid, offset[idx], NULL);
     assert(errno == 0);
     return retval;
 }
@@ -49,7 +49,7 @@ long nt_get_syscall_ret(pid_t pid)
     int offset = offsetof(struct user, regs.rax);
 
     errno = 0;
-    long retval = ptrace(PTRACE_PEEKUSER, pid, offset);
+    long retval = ptrace(PTRACE_PEEKUSER, pid, offset, NULL);
     assert(errno == 0);
     return retval;
 }

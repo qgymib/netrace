@@ -8,23 +8,28 @@
 
 int nt_ip_addr(const char* ip, int port, struct sockaddr* addr)
 {
+    int ret;
     int family = strstr(ip, ":") != NULL ? AF_INET6 : AF_INET;
     if (family == AF_INET)
     {
         struct sockaddr_in* p_addr = (struct sockaddr_in*)addr;
         p_addr->sin_family = AF_INET;
         p_addr->sin_port = htons(port);
-        inet_pton(AF_INET, ip, &p_addr->sin_addr);
+        ret = inet_pton(AF_INET, ip, &p_addr->sin_addr);
     }
     else
     {
         struct sockaddr_in6* p_addr = (struct sockaddr_in6*)addr;
         p_addr->sin6_family = AF_INET6;
         p_addr->sin6_port = htons(port);
-        inet_pton(AF_INET6, ip, &p_addr->sin6_addr);
+        ret = inet_pton(AF_INET6, ip, &p_addr->sin6_addr);
     }
 
-    return 0;
+    if (ret == 0)
+    { /* ip not contain a character string representing a valid network address. */
+        return EINVAL;
+    }
+    return ret == 1 ? 0 : errno;
 }
 
 int nt_ip_name(const struct sockaddr* addr, char* ip, size_t len, int* port)
@@ -123,7 +128,7 @@ ssize_t nt_read(int fd, void* buf, size_t size)
     return read_sz;
 }
 
-ssize_t nt_write(int fd, const char* buf, size_t size)
+ssize_t nt_write(int fd, const void* buf, size_t size)
 {
     ssize_t write_sz;
     do
@@ -131,4 +136,10 @@ ssize_t nt_write(int fd, const char* buf, size_t size)
         write_sz = write(fd, buf, size);
     } while (write_sz == -1 && errno == EINTR);
     return write_sz;
+}
+
+void nt_sockaddr_copy(struct sockaddr* dst, const struct sockaddr* src)
+{
+    size_t copy_sz = src->sa_family == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
+    memcpy(dst, src, copy_sz);
 }

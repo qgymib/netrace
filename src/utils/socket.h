@@ -25,6 +25,12 @@ int nt_ip_addr(const char* ip, int port, struct sockaddr* addr);
  */
 int nt_ip_name(const struct sockaddr* addr, char* ip, size_t len, int* port);
 
+/**
+ * @brief Set or remove nonblock flag.
+ * @param[in] fd FD.
+ * @param[in] set Is nonblock.
+ * @return 0 if success, errno if failed.
+ */
 int nt_nonblock(int fd, int set);
 
 /**
@@ -32,7 +38,17 @@ int nt_nonblock(int fd, int set);
  */
 ssize_t nt_read(int fd, void* buf, size_t size);
 
-ssize_t nt_write(int fd, const char* buf, size_t size);
+/**
+ * @brief Like write(), but handle #EINTR.
+ */
+ssize_t nt_write(int fd, const void* buf, size_t size);
+
+/**
+ * @brief Copy socket address.
+ * @param[out] dst  Destination. It is recommand to use `struct sockaddr_storage`.
+ * @param[in] src Source. `struct sockaddr_in` or `struct sockaddr_in6`.
+ */
+void nt_sockaddr_copy(struct sockaddr* dst, const struct sockaddr* src);
 
 #ifdef __cplusplus
 }

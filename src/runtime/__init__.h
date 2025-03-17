@@ -28,14 +28,36 @@ typedef struct prog_node
     int           flag_syscall_enter : 1; /* Is entry syscall. */
 } prog_node_t;
 
+typedef struct nt_proxy
+{
+    /**
+     * @brief Release this object.
+     * @param[in] thiz  Object handle.
+     */
+    void (*release)(struct nt_proxy* thiz);
+
+    /**
+     * @brief Queue next incoming connection address.
+     * @param[in] thiz  Object handle.
+     * @param[in] type SOCK_STREAM / SOCK_DGRAM
+     * @param[in] addr  Peer address.
+     */
+    void (*queue)(struct nt_proxy* thiz, int type, struct sockaddr* addr);
+
+    /**
+     * @brief Get listen address.
+     * @param[in] thiz  Object handle.
+     * @param[in] domain AF_INET / AF_INET6
+     * @param[in] type SOCK_STREAM / SOCK_DGRAM
+     * @return Listen address.
+     */
+    struct sockaddr* (*listen_addr)(struct nt_proxy* thiz, int domain, int type);
+} nt_proxy_t;
+
 typedef struct runtime
 {
-    char*    socks5_addr; /* Socks5 address. */
-    unsigned socks5_port; /* Socks5 port. */
-
-    int                tcp_listen_fd; /* TCP socket. */
-    int                udp_listen_fd; /* UDP socket. */
-    struct sockaddr_in listen_addr;   /* Listen address. */
+    char*       proxy_url; /* Socks5 address. */
+    nt_proxy_t* proxy;     /* Proxy object. */
 
     char**   prog_args;        /* Arguments for child program, ending with NULL. */
     pid_t    prog_pid;         /* First child pid. */
@@ -74,6 +96,14 @@ void nt_prog_node_release(prog_node_t* prog);
  * @param[in] prog Program node.
  */
 void nt_sock_node_release(sock_node_t* sock);
+
+/**
+ * @brief Create a proxy object.
+ * @param[out] proxy Proxy object.
+ * @param[in] url Url.
+ * @return 0 if success, errno if failed.
+ */
+int nt_proxy_create(nt_proxy_t** proxy, const char* url);
 
 #ifdef __cplusplus
 }

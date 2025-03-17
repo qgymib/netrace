@@ -42,6 +42,11 @@ void nt_free(void* addr);
  */
 char* nt_strdup(const char* s);
 
+/**
+ * @brief Like #nt_strdup(), but copy at max \p n bytes.
+ */
+char* nt_strndup(const char* s, size_t n);
+
 #ifdef __cplusplus
 }
 #endif

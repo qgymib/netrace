@@ -21,4 +21,9 @@
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
 #endif
 
+#ifndef STRINGIFY
+#define STRINGIFY(x)    STRINGIFY2(x)
+#define STRINGIFY2(x)   #x
+#endif
+
 #endif

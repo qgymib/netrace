@@ -453,9 +453,7 @@ void nt_proxy_queue(const struct sockaddr* addr)
     channel->outbound.channel = channel;
     channel->ubuf_sz = 0;
     channel->dbuf_sz = 0;
-
-    size_t copy_sz = addr->sa_family == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
-    memcpy(&channel->peeraddr, addr, copy_sz);
+    nt_sockaddr_copy((struct sockaddr*)&channel->peeraddr, addr);
 
     pthread_mutex_lock(&s_proxy->addr_queue_mutex);
     ev_list_push_back(&s_proxy->addr_queue, &channel->node);

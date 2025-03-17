@@ -26,7 +26,7 @@ endfunction()
 
 add_library(lib${PROJECT_NAME} STATIC
     "src/runtime/__init__.c"
-    "src/runtime/proxy.c"
+    "src/runtime/socks5.c"
     "src/utils/list.c"
     "src/utils/log.c"
     "src/utils/map.c"

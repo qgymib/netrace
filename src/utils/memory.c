@@ -48,3 +48,16 @@ char* nt_strdup(const char* s)
     }
     return c;
 }
+
+char* nt_strndup(const char* s, size_t n)
+{
+    size_t copy_sz = 0;
+    for (; s[copy_sz] != '\0' && copy_sz <= n; copy_sz++)
+    {
+    }
+
+    char* c = nt_malloc(copy_sz + 1);
+    memcpy(c, s, copy_sz);
+    c[copy_sz] = '\0';
+    return c;
+}
