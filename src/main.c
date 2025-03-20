@@ -72,6 +72,7 @@ static void s_trace_setup(prog_node_t* info)
     {
         LOG_F_ABORT("ptrace() failed: (%d) %s.", errno, strerror(errno));
     }
+    LOG_D("pid=%d setup ptrace.", info->pid);
 }
 
 static prog_node_t* s_find_proc(pid_t pid)
@@ -113,10 +114,11 @@ static void s_check_child_exit_reason(void)
 
 static void s_trace_syscall_socket_enter(prog_node_t* prog)
 {
-    sock_node_t* sock = calloc(1, sizeof(sock_node_t));
+    sock_node_t* sock = nt_calloc(1, sizeof(sock_node_t));
     sock->fd = -1;
-    sock->domain = nt_get_syscall_arg(prog->pid, 0);
-    sock->type = nt_get_syscall_arg(prog->pid, 1);
+    sock->socket_domain = nt_get_syscall_arg(prog->pid, 0);
+    sock->socket_type = nt_get_syscall_arg(prog->pid, 1) & 0xFF;
+    sock->socket_protocol = nt_get_syscall_arg(prog->pid, 2);
 
     if (ev_map_insert(&prog->sock_map, &sock->node) != NULL)
     {
@@ -134,7 +136,8 @@ static void s_trace_syscall_socket_leave(prog_node_t* prog)
     ev_map_erase(&prog->sock_map, &sock->node);
     if ((sock->fd = nt_get_syscall_ret(prog->pid)) < 0)
     {
-        LOG_D("Ignore socket=%d domain=%d type=%d", sock->fd, sock->domain, sock->type);
+        LOG_D("pid=%d ignore socket=%d domain=%d type=%d protocol=%d.", prog->pid, sock->fd, sock->socket_domain,
+              sock->socket_type, sock->socket_protocol);
         nt_sock_node_release(sock);
         return;
     }
@@ -143,7 +146,8 @@ static void s_trace_syscall_socket_leave(prog_node_t* prog)
     {
         LOG_F_ABORT("Conflict node: pid=%d, fd=%d.", prog->pid, sock->fd);
     }
-    LOG_D("socket=%d domain=%d type=%d.", sock->fd, sock->domain, sock->type);
+    LOG_D("pid=%d socket=%d domain=%d type=%d protocol=%d.", prog->pid, sock->fd, sock->socket_domain,
+          sock->socket_type, sock->socket_protocol);
 }
 
 static void s_trace_syscall_close_enter(prog_node_t* prog)
@@ -157,7 +161,7 @@ static void s_trace_syscall_close_enter(prog_node_t* prog)
     }
 
     sock_node_t* sock = container_of(it, sock_node_t, node);
-    LOG_D("close socket=%d", sock->fd);
+    LOG_D("pid=%d close socket=%d", prog->pid, sock->fd);
     ev_map_erase(&prog->sock_map, &sock->node);
     nt_sock_node_release(sock);
 }
@@ -169,7 +173,7 @@ static void s_trace_syscall_connect_enter(prog_node_t* prog)
     ev_map_node_t* it = ev_map_find(&prog->sock_map, &tmp.node);
     if (it == NULL)
     {
-        LOG_W("Cannot find fd=%d in pid=%d.", tmp.fd, prog->pid);
+        LOG_W("pid=%d cannot find fd=%d.", prog->pid, tmp.fd);
         prog->sock_last = NULL;
         return;
     }
@@ -185,16 +189,20 @@ static void s_trace_syscall_connect_enter(prog_node_t* prog)
         nt_syscall_getdata(prog->pid, p_sockaddr, &sock->orig_addr, sizeof(struct sockaddr_in6));
     }
 
+    /* Create proxy channel. */
+    if (G->proxy->channel(G->proxy, sock->socket_type, (struct sockaddr*)&sock->orig_addr, &sock->channel) != 0)
+    {
+        return;
+    }
+
     /* Overwrite connect address. */
-    struct sockaddr* newaddr = G->proxy->listen_addr(G->proxy, sock->orig_addr.ss_family, sock->type);
+    struct sockaddr* newaddr = NULL;
+    sock->channel->proxy_addr(sock->channel, &newaddr);
     if (newaddr != NULL)
     {
         size_t newaddrlen = newaddr->sa_family == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
         nt_syscall_setdata(prog->pid, p_sockaddr, newaddr, newaddrlen);
     }
-
-    /* Queue to proxy. */
-    G->proxy->queue(G->proxy, sock->type, (struct sockaddr*)&sock->orig_addr);
 }
 
 static void s_trace_syscall_connect_leave(prog_node_t* prog)
@@ -256,14 +264,11 @@ static int s_on_cmp_sock(const ev_map_node_t* key1, const ev_map_node_t* key2, v
 static prog_node_t* s_prog_node_save(pid_t pid)
 {
     prog_node_t* info = nt_calloc(1, sizeof(prog_node_t));
-    if (info == NULL)
-    {
-        LOG_F_ABORT("%s", strerror(ENOMEM));
-    }
     info->pid = pid;
     ev_map_init(&info->sock_map, s_on_cmp_sock, NULL);
 
     ev_map_insert(&G->prog_map, &info->node);
+    LOG_D("Tracing new process pid=%d.", pid);
     return info;
 }
 
@@ -302,7 +307,7 @@ static void do_trace()
 
             ev_map_erase(&G->prog_map, &info->node);
             nt_prog_node_release(info);
-            LOG_D("PID=%d exit", pid);
+            LOG_D("PID=%d exit.", pid);
             continue;
         }
 
@@ -310,11 +315,11 @@ static void do_trace()
         if (sig == SIGTRAP)
         {
             if (!info->flag_setup)
-            {/* execve() */
+            { /* execve() */
                 s_trace_setup(info);
             }
             else
-            {/* syscall trigger. */
+            { /* syscall trigger. */
                 s_trace_syscall(info);
             }
             sig = 0;
@@ -322,7 +327,7 @@ static void do_trace()
         else if (sig == SIGSTOP)
         {
             if (!info->flag_setup)
-            {/* clone() / fork() / vfork() */
+            { /* clone() / fork() / vfork() */
                 s_trace_setup(info);
                 sig = 0;
             }
@@ -377,6 +382,5 @@ int main(int argc, char* argv[])
     /* Save record */
     s_prog_node_save(G->prog_pid);
 
-    LOG_D("child pid=%d.", G->prog_pid);
     return do_parent();
 }

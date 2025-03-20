@@ -8,12 +8,64 @@
 extern "C" {
 #endif
 
+typedef struct nt_channel
+{
+    /**
+     * @brief Release this object.
+     * @param[in] thiz  Object handle.
+     */
+    void (*release)(struct nt_channel* thiz);
+
+    /**
+     * @brief Get proxy address.
+     *
+     * For SOCK_STREAM, this is the address connect to. For SOCK_DGRAM, this is the address sendto.
+     *
+     * @param[in] thiz  Object handle.
+     * @param[out] addr Proxy address.
+     * @return 0 for success, errno for failed.
+     */
+    int (*proxy_addr)(struct nt_channel* thiz, struct sockaddr** addr);
+
+    /**
+     * @brief Get bound address.
+     *
+     * This address is bound on proxy server. It is typically used in protocols which require the client to accept
+     * connections from the server (DNS for example).
+     *
+     * @param[in] thiz  Object handle.
+     * @param[in] addr  Bound address.
+     * @return 0 for success, errno for failed.
+     */
+    int (*bound_addr)(struct nt_channel* thiz, struct sockaddr** addr);
+} nt_channel_t;
+
+typedef struct nt_proxy
+{
+    /**
+     * @brief Release this object.
+     * @param[in] thiz  Object handle.
+     */
+    void (*release)(struct nt_proxy* thiz);
+
+    /**
+     * @brief Create a channel for proxy data.
+     * @param[in] thiz  Object handle.
+     * @param[in] type SOCK_STREAM / SOCK_DGRAM
+     * @param[in] peeraddr Peer address.
+     * @param[out] channel Channel handle.
+     */
+    int (*channel)(struct nt_proxy* thiz, int type, struct sockaddr* peeraddr, nt_channel_t** channel);
+} nt_proxy_t;
+
 typedef struct sock_node
 {
     ev_map_node_t           node;
-    int                     fd;        /* Return value of child's socket(). */
-    int                     domain;    /* Communication domain: AF_INET/AF_INET6. */
-    int                     type;      /* SOCK_STREAM/SOCK_DGRAM */
+    int                     fd;            /* Return value of child's socket(). */
+    int                     socket_domain; /* AF_INET/AF_INET6. */
+    int                     socket_type;   /* SOCK_STREAM/SOCK_DGRAM */
+    int                     socket_protocol;
+    nt_channel_t*           channel;
     struct sockaddr_storage orig_addr; /* Orignal connect address. */
 } sock_node_t;
 
@@ -27,32 +79,6 @@ typedef struct prog_node
     int           flag_setup : 1;         /* Is setup done. */
     int           flag_syscall_enter : 1; /* Is entry syscall. */
 } prog_node_t;
-
-typedef struct nt_proxy
-{
-    /**
-     * @brief Release this object.
-     * @param[in] thiz  Object handle.
-     */
-    void (*release)(struct nt_proxy* thiz);
-
-    /**
-     * @brief Queue next incoming connection address.
-     * @param[in] thiz  Object handle.
-     * @param[in] type SOCK_STREAM / SOCK_DGRAM
-     * @param[in] addr  Peer address.
-     */
-    void (*queue)(struct nt_proxy* thiz, int type, struct sockaddr* addr);
-
-    /**
-     * @brief Get listen address.
-     * @param[in] thiz  Object handle.
-     * @param[in] domain AF_INET / AF_INET6
-     * @param[in] type SOCK_STREAM / SOCK_DGRAM
-     * @return Listen address.
-     */
-    struct sockaddr* (*listen_addr)(struct nt_proxy* thiz, int domain, int type);
-} nt_proxy_t;
 
 typedef struct runtime
 {

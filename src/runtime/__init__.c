@@ -136,6 +136,11 @@ void nt_prog_node_release(prog_node_t* node)
 
 void nt_sock_node_release(sock_node_t* sock)
 {
+    if (sock->channel != NULL)
+    {
+        sock->channel->release(sock->channel);
+        sock->channel = NULL;
+    }
     nt_free(sock);
 }
 
