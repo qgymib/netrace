@@ -3,6 +3,7 @@
 
 #include <netinet/in.h>
 #include "utils/map.h"
+#include "utils/urlparser.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -58,6 +59,26 @@ typedef struct nt_proxy
     int (*channel)(struct nt_proxy* thiz, int type, struct sockaddr* peeraddr, nt_channel_t** channel);
 } nt_proxy_t;
 
+typedef struct nt_proxy_protocol
+{
+    /**
+     * @brief Scheme.
+     * 
+     * ```
+     * URI = scheme ":" ["//" authority] path ["?" query] ["#" fragment]
+     * ```
+     */
+    const char* scheme;
+
+    /**
+     * @brief Create a new proxy object.
+     * @param[out] proxy Proxy object.
+     * @param[in] url URL.
+     * @return 0 if success, errno if failed.
+     */
+    int (*make)(nt_proxy_t** proxy, const url_components_t* url);
+} nt_proxy_protocol_t;
+
 typedef struct sock_node
 {
     ev_map_node_t           node;
@@ -96,6 +117,8 @@ typedef struct runtime
  * @brief Global runtime.
  */
 extern runtime_t* G;
+
+extern const nt_proxy_protocol_t nt_proxy_protocol_socks5;
 
 /**
  * @brief Initialize global runtime.

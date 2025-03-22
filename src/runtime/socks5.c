@@ -10,7 +10,7 @@
 #include "utils/list.h"
 #include "utils/socket.h"
 #include "utils/log.h"
-#include "socks5.h"
+#include "__init__.h"
 #include "config.h"
 
 typedef enum socks5_stage
@@ -123,7 +123,7 @@ static void s_socks5_close_outbound(nt_proxy_socks5_t* socks5, socks5_channel_t*
 }
 
 static void s_socks5_close_inbound_outbound(nt_proxy_socks5_t* socks5, socks5_channel_t* channel)
-    {
+{
     s_socks5_close_inbound(socks5, channel);
     s_socks5_close_outbound(socks5, channel);
 }
@@ -208,68 +208,37 @@ static void s_nt_proxy_socks5_release(struct nt_proxy* thiz)
  * Syntax:
  * socks5://[user[:pass]@][host[:port]]
  */
-static int s_socks5_url_parser(nt_proxy_socks5_t* socks5, const char* url)
+static int s_socks5_url_parser(nt_proxy_socks5_t* socks5, const url_components_t* url)
 {
-    int         ret;
-    const char* origurl = url;
-    socks5->server_ip = NULL;
-    socks5->server_port = NT_DEFAULT_SOCKS5_PORT;
-    socks5->server_username = NULL;
-    socks5->server_password = NULL;
-
-    /* Check prefix. */
-    if (strncmp(url, "socks5://", 9) != 0)
+    if (url->host == NULL)
     {
-        return EINVAL;
-    }
-    url += 9;
-
-    /* Parser username and password. */
-    const char* p_userpass = strstr(url, "@");
-    if (p_userpass != NULL)
-    {
-        socks5->server_username = nt_strndup(url, p_userpass - url);
-        char* p_user = strstr(socks5->server_username, ":");
-        if (p_user != NULL)
-        {
-            socks5->server_password = nt_strdup(p_user + 1);
-            *p_user = '\0';
-        }
-
-        if (strlen(socks5->server_username) > 255 || strlen(socks5->server_password) > 255)
-        {
-            goto ERR;
-        }
-        url = p_userpass + 1;
-    }
-
-    /* Passer ip and port. */
-    const char* p_port = strstr(url, ":");
-    if (p_port != NULL)
-    {
-        socks5->server_ip = nt_strndup(url, p_port - url - 1);
-        if (sscanf(p_port + 1, "%d", &socks5->server_port) != 1)
-        {
-            LOG_E("Invalid port for `%s`.", origurl);
-            ret = EINVAL;
-            goto ERR;
-        }
+        socks5->server_ip = nt_strdup(NT_DEFAULT_SOCKS5_ADDR);
     }
     else
     {
-        socks5->server_ip = nt_strdup(url);
+        socks5->server_ip = nt_strdup(url->host);
     }
 
-    ret = nt_ip_addr(socks5->server_ip, socks5->server_port, (struct sockaddr*)&socks5->server_addr);
-    if (ret != 0)
+    if (url->port != NULL)
     {
-        goto ERR;
+        socks5->server_port = *url->port;
     }
-    return 0;
+    else
+    {
+        socks5->server_port = NT_DEFAULT_SOCKS5_PORT;
+    }
 
-ERR:
-    s_socks5_release_server_info(socks5);
-    return ret;
+    if (url->username != NULL)
+    {
+        socks5->server_username = nt_strdup(url->username);
+    }
+
+    if (url->password != NULL)
+    {
+        socks5->server_password = nt_strdup(url->password);
+    }
+
+    return 0;
 }
 
 static socks5_channel_t* s_socks5_pop_addr(nt_proxy_socks5_t* socks5)
@@ -358,7 +327,7 @@ static void s_socks5_handle_stage_init_w(nt_proxy_socks5_t* socks5, socks5_chann
     }
 
     channel->outbound.event.events = EPOLLIN;
-    if (epoll_ctl(socks5->epollfd, EPOLL_CTL_MOD, channel->outbound.event.data.fd, &channel->outbound.event) <0)
+    if (epoll_ctl(socks5->epollfd, EPOLL_CTL_MOD, channel->outbound.event.data.fd, &channel->outbound.event) < 0)
     {
         LOG_F_ABORT("epoll_ctl() failed: (%d) %s.\n", errno, strerror(errno));
     }
@@ -1059,7 +1028,7 @@ static int s_socks5_channel(struct nt_proxy* thiz, int type, struct sockaddr* pe
     return 0;
 }
 
-int nt_proxy_socks5_create(nt_proxy_t** proxy, const char* url)
+static int s_socks5_create(nt_proxy_t** proxy, const url_components_t* url)
 {
     int                retval = 0;
     nt_proxy_socks5_t* socks5 = nt_calloc(1, sizeof(nt_proxy_socks5_t));
@@ -1107,3 +1076,5 @@ ERR_EPOLL_CREATE:
     s_socks5_release_server_info(socks5);
     return retval;
 }
+
+const nt_proxy_protocol_t nt_proxy_protocol_socks5 = { "socks5", s_socks5_create };
