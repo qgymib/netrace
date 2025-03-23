@@ -52,7 +52,7 @@ char* nt_strdup(const char* s)
 char* nt_strndup(const char* s, size_t n)
 {
     size_t copy_sz = 0;
-    for (; s[copy_sz] != '\0' && copy_sz <= n; copy_sz++)
+    for (; s[copy_sz] != '\0' && copy_sz < n; copy_sz++)
     {
     }
 

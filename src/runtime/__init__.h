@@ -3,42 +3,11 @@
 
 #include <netinet/in.h>
 #include "utils/map.h"
+#include "utils/urlparser.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-typedef struct nt_channel
-{
-    /**
-     * @brief Release this object.
-     * @param[in] thiz  Object handle.
-     */
-    void (*release)(struct nt_channel* thiz);
-
-    /**
-     * @brief Get proxy address.
-     *
-     * For SOCK_STREAM, this is the address connect to. For SOCK_DGRAM, this is the address sendto.
-     *
-     * @param[in] thiz  Object handle.
-     * @param[out] addr Proxy address.
-     * @return 0 for success, errno for failed.
-     */
-    int (*proxy_addr)(struct nt_channel* thiz, struct sockaddr** addr);
-
-    /**
-     * @brief Get bound address.
-     *
-     * This address is bound on proxy server. It is typically used in protocols which require the client to accept
-     * connections from the server (DNS for example).
-     *
-     * @param[in] thiz  Object handle.
-     * @param[in] addr  Bound address.
-     * @return 0 for success, errno for failed.
-     */
-    int (*bound_addr)(struct nt_channel* thiz, struct sockaddr** addr);
-} nt_channel_t;
 
 typedef struct nt_proxy
 {
@@ -53,10 +22,40 @@ typedef struct nt_proxy
      * @param[in] thiz  Object handle.
      * @param[in] type SOCK_STREAM / SOCK_DGRAM
      * @param[in] peeraddr Peer address.
-     * @param[out] channel Channel handle.
+     * @param[out] proxyaddr For SOCK_STREAM, this is the address connect to. For SOCK_DGRAM, this is the address
+     *   sendto. It is
+     * @return Channel handle.
      */
-    int (*channel)(struct nt_proxy* thiz, int type, struct sockaddr* peeraddr, nt_channel_t** channel);
+    int (*channel_create)(struct nt_proxy* thiz, int type, const struct sockaddr* peeraddr,
+                          struct sockaddr_storage* proxyaddr);
+
+    /**
+     * @brief Release a channel.
+     * @param[in] thiz  Object handle.
+     * @param[in] channel Channel.
+     */
+    void (*channel_release)(struct nt_proxy* thiz, int channel);
 } nt_proxy_t;
+
+typedef struct nt_proxy_protocol
+{
+    /**
+     * @brief Scheme.
+     *
+     * ```
+     * URI = scheme ":" ["//" authority] path ["?" query] ["#" fragment]
+     * ```
+     */
+    const char* scheme;
+
+    /**
+     * @brief Create a new proxy object.
+     * @param[out] proxy Proxy object.
+     * @param[in] url URL.
+     * @return 0 if success, errno if failed.
+     */
+    int (*make)(nt_proxy_t** proxy, const url_components_t* url);
+} nt_proxy_protocol_t;
 
 typedef struct sock_node
 {
@@ -65,7 +64,7 @@ typedef struct sock_node
     int                     socket_domain; /* AF_INET/AF_INET6. */
     int                     socket_type;   /* SOCK_STREAM/SOCK_DGRAM */
     int                     socket_protocol;
-    nt_channel_t*           channel;
+    int                     channel;
     struct sockaddr_storage orig_addr; /* Orignal connect address. */
 } sock_node_t;
 
@@ -96,6 +95,9 @@ typedef struct runtime
  * @brief Global runtime.
  */
 extern runtime_t* G;
+
+extern const nt_proxy_protocol_t nt_proxy_protocol_raw;
+extern const nt_proxy_protocol_t nt_proxy_protocol_socks5;
 
 /**
  * @brief Initialize global runtime.

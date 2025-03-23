@@ -1,6 +1,8 @@
 #ifndef NT_UTILS_DEFINES_H
 #define NT_UTILS_DEFINES_H
 
+#include <errno.h>
+
 #ifndef offsetof
 #define offsetof(type, member) ((size_t)&(((type*)0)->member))
 #endif
@@ -22,8 +24,19 @@
 #endif
 
 #ifndef STRINGIFY
-#define STRINGIFY(x)    STRINGIFY2(x)
-#define STRINGIFY2(x)   #x
+#define STRINGIFY(x) STRINGIFY2(x)
+#define STRINGIFY2(x) #x
+#endif
+
+/**
+ * @brief Convert posix errno to netrace errno.
+ */
+#if EDOM > 0
+#define NT_ERR(x) (-(x))
+#define NT_SYSERR(x) (-(x))
+#else
+#define NT_ERR(x) (x)
+#define NT_SYSERR(x) (x)
 #endif
 
 #endif

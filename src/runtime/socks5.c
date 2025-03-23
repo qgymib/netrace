@@ -10,7 +10,7 @@
 #include "utils/list.h"
 #include "utils/socket.h"
 #include "utils/log.h"
-#include "socks5.h"
+#include "__init__.h"
 #include "config.h"
 
 typedef enum socks5_stage
@@ -30,11 +30,9 @@ typedef struct socks5_sock
 
 typedef struct socks5_channel
 {
-    nt_channel_t            basis;
     ev_list_node_t          node;
     struct nt_proxy_socks5* socks5;
-    int                     refcnt;
-    pthread_mutex_t         refcnt_mutex;
+    int                     chid;
 
     int                     type; /* SOCK_STREAM / SOCK_DGRAM */
     socks5_sock_t           inbound;
@@ -71,6 +69,7 @@ typedef struct nt_proxy_socks5
 
     pthread_mutex_t addr_queue_mutex; /* Mutex for #nt_proxy_socks5_t::addr_queue. */
     ev_list_t       addr_queue;       /* #socks5_channel_t */
+    int             chid_cnt;
 } nt_proxy_socks5_t;
 
 static void s_socks5_release_server_info(nt_proxy_socks5_t* socks5)
@@ -123,29 +122,15 @@ static void s_socks5_close_outbound(nt_proxy_socks5_t* socks5, socks5_channel_t*
 }
 
 static void s_socks5_close_inbound_outbound(nt_proxy_socks5_t* socks5, socks5_channel_t* channel)
-    {
+{
     s_socks5_close_inbound(socks5, channel);
     s_socks5_close_outbound(socks5, channel);
 }
 
-static void s_socks5_channel_release(nt_proxy_socks5_t* socks5, socks5_channel_t* channel, int close_bound)
+static void s_socks5_channel_release(nt_proxy_socks5_t* socks5, socks5_channel_t* channel)
 {
-    int refcnt;
-    pthread_mutex_lock(&channel->refcnt_mutex);
-    {
-        refcnt = (--channel->refcnt);
-    }
-    pthread_mutex_unlock(&channel->refcnt_mutex);
-
-    if (close_bound)
-    {
-        s_socks5_close_inbound_outbound(socks5, channel);
-    }
-    if (refcnt == 0)
-    {
-        s_socks5_close_inbound_outbound(socks5, channel);
-        nt_free(channel);
-    }
+    s_socks5_close_inbound_outbound(socks5, channel);
+    nt_free(channel);
 }
 
 static void s_socks5_close_tcp_ipv4(nt_proxy_socks5_t* socks5)
@@ -171,7 +156,7 @@ static void s_socks5_channel_remove_and_release(nt_proxy_socks5_t* socks5, socks
     ev_list_erase(&socks5->channel_list, &channel->node);
     ev_map_erase(&socks5->sock_map, &channel->inbound.node);
     ev_map_erase(&socks5->sock_map, &channel->outbound.node);
-    s_socks5_channel_release(socks5, channel, 1);
+    s_socks5_channel_release(socks5, channel);
 }
 
 static void s_nt_proxy_socks5_release(struct nt_proxy* thiz)
@@ -184,7 +169,7 @@ static void s_nt_proxy_socks5_release(struct nt_proxy* thiz)
     while ((it = ev_list_pop_front(&socks5->addr_queue)) != NULL)
     {
         socks5_channel_t* channel = container_of(it, socks5_channel_t, node);
-        s_socks5_channel_release(socks5, channel, 1);
+        s_socks5_channel_release(socks5, channel);
     }
     while ((it = ev_list_begin(&socks5->channel_list)) != NULL)
     {
@@ -208,68 +193,37 @@ static void s_nt_proxy_socks5_release(struct nt_proxy* thiz)
  * Syntax:
  * socks5://[user[:pass]@][host[:port]]
  */
-static int s_socks5_url_parser(nt_proxy_socks5_t* socks5, const char* url)
+static int s_socks5_url_parser(nt_proxy_socks5_t* socks5, const url_components_t* url)
 {
-    int         ret;
-    const char* origurl = url;
-    socks5->server_ip = NULL;
-    socks5->server_port = NT_DEFAULT_SOCKS5_PORT;
-    socks5->server_username = NULL;
-    socks5->server_password = NULL;
-
-    /* Check prefix. */
-    if (strncmp(url, "socks5://", 9) != 0)
+    if (url->host == NULL)
     {
-        return EINVAL;
-    }
-    url += 9;
-
-    /* Parser username and password. */
-    const char* p_userpass = strstr(url, "@");
-    if (p_userpass != NULL)
-    {
-        socks5->server_username = nt_strndup(url, p_userpass - url);
-        char* p_user = strstr(socks5->server_username, ":");
-        if (p_user != NULL)
-        {
-            socks5->server_password = nt_strdup(p_user + 1);
-            *p_user = '\0';
-        }
-
-        if (strlen(socks5->server_username) > 255 || strlen(socks5->server_password) > 255)
-        {
-            goto ERR;
-        }
-        url = p_userpass + 1;
-    }
-
-    /* Passer ip and port. */
-    const char* p_port = strstr(url, ":");
-    if (p_port != NULL)
-    {
-        socks5->server_ip = nt_strndup(url, p_port - url - 1);
-        if (sscanf(p_port + 1, "%d", &socks5->server_port) != 1)
-        {
-            LOG_E("Invalid port for `%s`.", origurl);
-            ret = EINVAL;
-            goto ERR;
-        }
+        socks5->server_ip = nt_strdup(NT_DEFAULT_SOCKS5_ADDR);
     }
     else
     {
-        socks5->server_ip = nt_strdup(url);
+        socks5->server_ip = nt_strdup(url->host);
     }
 
-    ret = nt_ip_addr(socks5->server_ip, socks5->server_port, (struct sockaddr*)&socks5->server_addr);
-    if (ret != 0)
+    if (url->port != NULL)
     {
-        goto ERR;
+        socks5->server_port = *url->port;
     }
-    return 0;
+    else
+    {
+        socks5->server_port = NT_DEFAULT_SOCKS5_PORT;
+    }
 
-ERR:
-    s_socks5_release_server_info(socks5);
-    return ret;
+    if (url->username != NULL)
+    {
+        socks5->server_username = nt_strdup(url->username);
+    }
+
+    if (url->password != NULL)
+    {
+        socks5->server_password = nt_strdup(url->password);
+    }
+
+    return 0;
 }
 
 static socks5_channel_t* s_socks5_pop_addr(nt_proxy_socks5_t* socks5)
@@ -291,13 +245,13 @@ static void s_socks5_handle_tcp_accept(nt_proxy_socks5_t* socks5, int listen_fd)
     /* Setup inbound and outbound fd. */
     if ((channel->inbound.event.data.fd = accept(listen_fd, NULL, NULL)) < 0)
     {
-        s_socks5_channel_release(socks5, channel, 1);
+        s_socks5_channel_release(socks5, channel);
         return;
     }
     nt_nonblock(channel->inbound.event.data.fd, 1);
     if ((channel->outbound.event.data.fd = socket(socks5->server_addr.ss_family, SOCK_STREAM, 0)) < 0)
     {
-        s_socks5_channel_release(socks5, channel, 1);
+        s_socks5_channel_release(socks5, channel);
         return;
     }
     nt_nonblock(channel->outbound.event.data.fd, 1);
@@ -310,7 +264,7 @@ static void s_socks5_handle_tcp_accept(nt_proxy_socks5_t* socks5, int listen_fd)
         ret = errno;
         if (ret != EAGAIN && ret != EINPROGRESS)
         {
-            s_socks5_channel_release(socks5, channel, 1);
+            s_socks5_channel_release(socks5, channel);
             LOG_I("Connect peer failed: (%d) %s.", ret, strerror(ret));
             return;
         }
@@ -358,7 +312,7 @@ static void s_socks5_handle_stage_init_w(nt_proxy_socks5_t* socks5, socks5_chann
     }
 
     channel->outbound.event.events = EPOLLIN;
-    if (epoll_ctl(socks5->epollfd, EPOLL_CTL_MOD, channel->outbound.event.data.fd, &channel->outbound.event) <0)
+    if (epoll_ctl(socks5->epollfd, EPOLL_CTL_MOD, channel->outbound.event.data.fd, &channel->outbound.event) < 0)
     {
         LOG_F_ABORT("epoll_ctl() failed: (%d) %s.\n", errno, strerror(errno));
     }
@@ -1003,28 +957,8 @@ static int s_socks5_on_cmp_sock(const ev_map_node_t* key1, const ev_map_node_t* 
     return s1->event.data.fd - s2->event.data.fd;
 }
 
-static void s_socks5_channel_basis_release(struct nt_channel* thiz)
-{
-    socks5_channel_t* channel = container_of(thiz, socks5_channel_t, basis);
-    s_socks5_channel_release(channel->socks5, channel, 0);
-}
-
-static int s_socks5_chnnel_proxy_addr(struct nt_channel* thiz, struct sockaddr** addr)
-{
-    socks5_channel_t*  channel = container_of(thiz, socks5_channel_t, basis);
-    nt_proxy_socks5_t* socks5 = channel->socks5;
-    if (channel->type == SOCK_DGRAM)
-    {
-        return ENOTSUP;
-    }
-
-    int family = channel->peeraddr.ss_family;
-    *addr = family == AF_INET ? (struct sockaddr*)&socks5->tcp_listen_ipv4_addr
-                              : (struct sockaddr*)&socks5->tcp_listen_ipv6_addr;
-    return 0;
-}
-
-static int s_socks5_channel(struct nt_proxy* thiz, int type, struct sockaddr* peeraddr, nt_channel_t** channel)
+static int s_socks5_channel_create(struct nt_proxy* thiz, int type, const struct sockaddr* peeraddr,
+                                   struct sockaddr_storage* proxyaddr)
 {
     if (peeraddr->sa_family != AF_INET && peeraddr->sa_family != AF_INET6)
     {
@@ -1033,12 +967,7 @@ static int s_socks5_channel(struct nt_proxy* thiz, int type, struct sockaddr* pe
 
     nt_proxy_socks5_t* socks5 = container_of(thiz, nt_proxy_socks5_t, basis);
     socks5_channel_t*  ch = nt_malloc(sizeof(socks5_channel_t));
-    ch->basis.release = s_socks5_channel_basis_release;
-    ch->basis.proxy_addr = s_socks5_chnnel_proxy_addr;
-    ch->basis.bound_addr = NULL;
     ch->socks5 = socks5;
-    ch->refcnt = 2;
-    pthread_mutex_init(&ch->refcnt_mutex, NULL);
     ch->type = type;
     ch->inbound.event.data.fd = -1;
     ch->inbound.event.events = 0;
@@ -1050,21 +979,24 @@ static int s_socks5_channel(struct nt_proxy* thiz, int type, struct sockaddr* pe
     ch->dbuf_sz = 0;
     ch->ubuf_sz = 0;
     nt_sockaddr_copy((struct sockaddr*)&ch->peeraddr, peeraddr);
+    nt_sockaddr_copy((struct sockaddr*)proxyaddr, (struct sockaddr*)&socks5->tcp_listen_ipv4_addr);
 
     pthread_mutex_lock(&socks5->addr_queue_mutex);
-    ev_list_push_back(&socks5->addr_queue, &ch->node);
+    {
+        ch->chid = socks5->chid_cnt++;
+        ev_list_push_back(&socks5->addr_queue, &ch->node);
+    }
     pthread_mutex_unlock(&socks5->addr_queue_mutex);
 
-    *channel = &ch->basis;
-    return 0;
+    return ch->chid;
 }
 
-int nt_proxy_socks5_create(nt_proxy_t** proxy, const char* url)
+static int s_socks5_create(nt_proxy_t** proxy, const url_components_t* url)
 {
     int                retval = 0;
     nt_proxy_socks5_t* socks5 = nt_calloc(1, sizeof(nt_proxy_socks5_t));
     socks5->basis.release = s_nt_proxy_socks5_release;
-    socks5->basis.channel = s_socks5_channel;
+    socks5->basis.channel_create = s_socks5_channel_create;
     ev_map_init(&socks5->sock_map, s_socks5_on_cmp_sock, NULL);
     ev_list_init(&socks5->channel_list);
     ev_list_init(&socks5->addr_queue);
@@ -1107,3 +1039,5 @@ ERR_EPOLL_CREATE:
     s_socks5_release_server_info(socks5);
     return retval;
 }
+
+const nt_proxy_protocol_t nt_proxy_protocol_socks5 = { "socks5", s_socks5_create };

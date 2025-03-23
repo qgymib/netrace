@@ -6,11 +6,15 @@
 #include "utils/log.h"
 #include "utils/memory.h"
 #include "utils/str.h"
-#include "socks5.h"
 #include "config.h"
 #include "__init__.h"
 
 runtime_t* G = NULL;
+
+static const nt_proxy_protocol_t* s_protocols[] = {
+    &nt_proxy_protocol_raw,
+    &nt_proxy_protocol_socks5,
+};
 
 // clang-format off
 static const char* s_help =
@@ -136,10 +140,10 @@ void nt_prog_node_release(prog_node_t* node)
 
 void nt_sock_node_release(sock_node_t* sock)
 {
-    if (sock->channel != NULL)
+    if (sock->channel >= 0)
     {
-        sock->channel->release(sock->channel);
-        sock->channel = NULL;
+        G->proxy->channel_release(G->proxy, sock->channel);
+        sock->channel = -1;
     }
     nt_free(sock);
 }
@@ -212,5 +216,29 @@ void nt_runtime_cleanup(void)
 
 int nt_proxy_create(nt_proxy_t** proxy, const char* url)
 {
-    return nt_proxy_socks5_create(proxy, url);
+    url_components_t* components = NULL;
+    int               ret = nt_url_components_parser(&components, url);
+    if (ret != 0)
+    {
+        LOG_E("Parser url failed: (%d) %s.", ret, strerror(ret));
+        exit(EXIT_FAILURE);
+    }
+
+    size_t i;
+    for (i = 0; i < ARRAY_SIZE(s_protocols); i++)
+    {
+        const nt_proxy_protocol_t* protocol = s_protocols[i];
+        if (strcmp(protocol->scheme, components->scheme) == 0)
+        {
+            ret = protocol->make(proxy, components);
+            goto finish;
+        }
+    }
+
+    LOG_E("Unknown protocol `%s`.", components->scheme);
+    ret = ENOTSUP;
+
+finish:
+    nt_url_components_free(components);
+    return ret;
 }

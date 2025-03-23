@@ -190,19 +190,17 @@ static void s_trace_syscall_connect_enter(prog_node_t* prog)
     }
 
     /* Create proxy channel. */
-    if (G->proxy->channel(G->proxy, sock->socket_type, (struct sockaddr*)&sock->orig_addr, &sock->channel) != 0)
+    struct sockaddr_storage proxyaddr;
+    sock->channel =
+        G->proxy->channel_create(G->proxy, sock->socket_type, (struct sockaddr*)&sock->orig_addr, &proxyaddr);
+    if (sock->channel < 0)
     {
         return;
     }
 
     /* Overwrite connect address. */
-    struct sockaddr* newaddr = NULL;
-    sock->channel->proxy_addr(sock->channel, &newaddr);
-    if (newaddr != NULL)
-    {
-        size_t newaddrlen = newaddr->sa_family == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
-        nt_syscall_setdata(prog->pid, p_sockaddr, newaddr, newaddrlen);
-    }
+    size_t newaddrlen = proxyaddr.ss_family == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
+    nt_syscall_setdata(prog->pid, p_sockaddr, &proxyaddr, newaddrlen);
 }
 
 static void s_trace_syscall_connect_leave(prog_node_t* prog)

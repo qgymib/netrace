@@ -6,7 +6,7 @@
 #include <sys/ioctl.h>
 #include "utils/socket.h"
 
-int nt_ip_addr(const char* ip, int port, struct sockaddr* addr)
+int nt_ip_addr(const char* ip, uint16_t port, struct sockaddr* addr)
 {
     int ret;
     int family = strstr(ip, ":") != NULL ? AF_INET6 : AF_INET;

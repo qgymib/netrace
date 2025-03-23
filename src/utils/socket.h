@@ -13,7 +13,7 @@ extern "C" {
  * @param[in] port Port number.
  * @param[out] addr Address to store result. It is recommand to use #sockaddr_storage.
  */
-int nt_ip_addr(const char* ip, int port, struct sockaddr* addr);
+int nt_ip_addr(const char* ip, uint16_t port, struct sockaddr* addr);
 
 /**
  * @brief Convert socket address into ip and port.
