@@ -1,6 +1,7 @@
 #ifndef NT_UTILS_SOCKET_H
 #define NT_UTILS_SOCKET_H
 
+#include <stdint.h>
 #include <sys/socket.h>
 
 #ifdef __cplusplus

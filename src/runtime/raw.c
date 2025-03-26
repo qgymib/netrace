@@ -77,6 +77,7 @@ static void s_proxy_raw_close_inbound_channel(nt_proxy_raw_t* raw, proxy_raw_cha
             epoll_ctl(raw->epollfd, EPOLL_CTL_DEL, ch->inbound.event.data.fd, &ch->inbound.event);
             ch->inbound.event.events = 0;
         }
+        ev_map_erase(&raw->sock_map, &ch->inbound.node);
         close(ch->inbound.event.data.fd);
         ch->inbound.event.data.fd = -1;
     }
@@ -91,6 +92,7 @@ static void s_proxy_raw_close_outbound_channel(nt_proxy_raw_t* raw, proxy_raw_ch
             epoll_ctl(raw->epollfd, EPOLL_CTL_DEL, ch->outbound.event.data.fd, &ch->outbound.event);
             ch->outbound.event.events = 0;
         }
+        ev_map_erase(&raw->sock_map, &ch->outbound.node);
         close(ch->outbound.event.data.fd);
         ch->outbound.event.data.fd = -1;
     }
@@ -116,7 +118,16 @@ static void s_proxy_raw_cleanup_actq(nt_proxy_raw_t* raw)
         proxy_raw_action_t* act = container_of(it, proxy_raw_action_t, node);
         if (act->type == RAW_CHANNEL_CREATE)
         {
-            s_proxy_raw_release_channel(raw, act->data.channel);
+            proxy_raw_channel_t* ch = act->data.channel;
+            if (ch->inbound.event.data.fd >= 0)
+            {
+                ev_map_insert(&raw->sock_map, &ch->inbound.node);
+            }
+            if (ch->outbound.event.data.fd >= 0)
+            {
+                ev_map_insert(&raw->sock_map, &ch->outbound.node);
+            }
+            ev_map_insert(&raw->channel_map, &ch->node);
         }
         nt_free(act);
     }
@@ -125,8 +136,6 @@ static void s_proxy_raw_cleanup_actq(nt_proxy_raw_t* raw)
 static void s_proxy_remove_and_release_channel(nt_proxy_raw_t* raw, proxy_raw_channel_t* ch)
 {
     ev_map_erase(&raw->channel_map, &ch->node);
-    ev_map_erase(&raw->sock_map, &ch->inbound.node);
-    ev_map_erase(&raw->sock_map, &ch->outbound.node);
     s_proxy_raw_release_channel(raw, ch);
 }
 
@@ -171,20 +180,18 @@ static void s_proxy_raw_weakup(nt_proxy_raw_t* raw)
     write(raw->eventfd, &buff, sizeof(buff));
 }
 
-static int s_proxy_new_channel_tcp(proxy_raw_channel_t* ch, const struct sockaddr* peeraddr)
+static int s_proxy_new_channel_tcp(proxy_raw_channel_t* ch)
 {
     int ret = 0;
 
     ch->islisten = 1;
-    nt_sockaddr_copy((struct sockaddr*)&ch->peeraddr, peeraddr);
-
-    if ((ch->inbound.event.data.fd = socket(peeraddr->sa_family, SOCK_STREAM, 0)) < 0)
+    if ((ch->inbound.event.data.fd = socket(ch->peeraddr.ss_family, SOCK_STREAM, 0)) < 0)
     {
         return NT_ERR(errno);
     }
     nt_nonblock(ch->inbound.event.data.fd, 1);
 
-    const char* ip = peeraddr->sa_family == AF_INET ? "127.0.0.1" : "::1";
+    const char* ip = ch->peeraddr.ss_family == AF_INET ? "127.0.0.1" : "::1";
     socklen_t   localaddrlen = sizeof(ch->localaddr);
     nt_ip_addr(ip, 0, (struct sockaddr*)&ch->localaddr);
     if (bind(ch->inbound.event.data.fd, (struct sockaddr*)&ch->localaddr, localaddrlen) < 0)
@@ -204,7 +211,7 @@ static int s_proxy_new_channel_tcp(proxy_raw_channel_t* ch, const struct sockadd
         goto ERR_BIND;
     }
 
-    if ((ch->outbound.event.data.fd = socket(peeraddr->sa_family, SOCK_STREAM, 0)) < 0)
+    if ((ch->outbound.event.data.fd = socket(ch->peeraddr.ss_family, SOCK_STREAM, 0)) < 0)
     {
         ret = NT_ERR(errno);
         goto ERR_BIND;
@@ -244,7 +251,7 @@ static int s_proxy_raw_channel_create(struct nt_proxy* thiz, int type, const str
     ch->dbuf_sz = 0;
     nt_sockaddr_copy((struct sockaddr*)&ch->peeraddr, peeraddr);
 
-    int ret = (type == SOCK_STREAM) ? s_proxy_new_channel_tcp(ch, peeraddr) : NT_ERR(ENOTSUP);
+    int ret = (type == SOCK_STREAM) ? s_proxy_new_channel_tcp(ch) : NT_ERR(ENOTSUP);
     if (ret < 0)
     {
         nt_free(ch);
@@ -271,12 +278,20 @@ static int s_proxy_raw_channel_create(struct nt_proxy* thiz, int type, const str
 
 static void s_proxy_raw_handle_event_channel_create(nt_proxy_raw_t* raw, proxy_raw_channel_t* channel)
 {
+    if (channel->inbound.event.data.fd >= 0)
+    {
+        ev_map_insert(&raw->sock_map, &channel->inbound.node);
+    }
+    if (channel->outbound.event.data.fd >= 0)
+    {
+        ev_map_insert(&raw->sock_map, &channel->outbound.node);
+    }
+    ev_map_insert(&raw->channel_map, &channel->node);
+
     if (channel->type == SOCK_STREAM)
     {
         channel->inbound.event.events = EPOLLIN;
         epoll_ctl(raw->epollfd, EPOLL_CTL_ADD, channel->inbound.event.data.fd, &channel->inbound.event);
-        ev_map_insert(&raw->sock_map, &channel->inbound.node);
-        ev_map_insert(&raw->channel_map, &channel->node);
         return;
     }
 }

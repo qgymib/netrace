@@ -29,7 +29,7 @@
     xx(SYS_socket,  s_trace_syscall_socket_enter,   s_trace_syscall_socket_leave)   \
     xx(SYS_close,   s_trace_syscall_close_enter,    SYSCALL_SKIP)                   \
     xx(SYS_connect, s_trace_syscall_connect_enter,  s_trace_syscall_connect_leave)  \
-    xx(SYS_clone,   SYSCALL_SKIP,                   SYSCALL_SKIP)
+    xx(SYS_clone,   s_trace_syscall_clone_enter,    SYSCALL_SKIP)
 // clang-format on
 
 static int do_child()
@@ -166,6 +166,14 @@ static void s_trace_syscall_close_enter(prog_node_t* prog)
     nt_sock_node_release(sock);
 }
 
+static void s_trace_syscall_clone_enter(prog_node_t* prog)
+{
+    /*
+     * Special handling for clone(), because it has no leaving.
+     */
+    prog->flag_syscall_enter = 0;
+}
+
 static void s_trace_syscall_connect_enter(prog_node_t* prog)
 {
     sock_node_t tmp;
@@ -173,7 +181,7 @@ static void s_trace_syscall_connect_enter(prog_node_t* prog)
     ev_map_node_t* it = ev_map_find(&prog->sock_map, &tmp.node);
     if (it == NULL)
     {
-        LOG_W("pid=%d cannot find fd=%d.", prog->pid, tmp.fd);
+        LOG_E("pid=%d cannot find fd=%d.", prog->pid, tmp.fd);
         prog->sock_last = NULL;
         return;
     }
@@ -238,6 +246,8 @@ static void s_trace_syscall(prog_node_t* info)
     else
     {
         info->flag_syscall_enter = 0;
+        int syscall = nt_get_syscall_id(info->pid);
+        assert(syscall == info->syscall);
 
         switch (info->syscall)
         {
@@ -287,7 +297,39 @@ static void do_trace()
             info = s_prog_node_save(pid);
         }
 
-        if (WIFEXITED(status) || WIFSIGNALED(status) || !WIFSTOPPED(status))
+        if (WIFSTOPPED(status))
+        {
+            int sig = WSTOPSIG(status);
+            if (sig == SIGTRAP)
+            {
+                if (!info->flag_setup)
+                { /* execve() */
+                    s_trace_setup(info);
+                }
+                else
+                { /* syscall trigger. */
+                    s_trace_syscall(info);
+                }
+                sig = 0;
+            }
+            else if (sig == SIGSTOP)
+            {
+                if (!info->flag_setup)
+                { /* clone() / fork() / vfork() */
+                    s_trace_setup(info);
+                    sig = 0;
+                }
+            }
+
+            if (ptrace(PTRACE_SYSCALL, pid, 0, sig) < 0)
+            {
+                LOG_F_ABORT("ptrace() failed: (%d) %s.", errno, strerror(errno));
+            }
+
+            continue;
+        }
+
+        if (WIFEXITED(status) || WIFSIGNALED(status))
         {
             if (pid == G->prog_pid)
             {
@@ -307,32 +349,6 @@ static void do_trace()
             nt_prog_node_release(info);
             LOG_D("PID=%d exit.", pid);
             continue;
-        }
-
-        int sig = WSTOPSIG(status);
-        if (sig == SIGTRAP)
-        {
-            if (!info->flag_setup)
-            { /* execve() */
-                s_trace_setup(info);
-            }
-            else
-            { /* syscall trigger. */
-                s_trace_syscall(info);
-            }
-            sig = 0;
-        }
-        else if (sig == SIGSTOP)
-        {
-            if (!info->flag_setup)
-            { /* clone() / fork() / vfork() */
-                s_trace_setup(info);
-                sig = 0;
-            }
-        }
-        if (ptrace(PTRACE_SYSCALL, pid, 0, sig) < 0)
-        {
-            LOG_F_ABORT("ptrace() failed: (%d) %s.", errno, strerror(errno));
         }
     }
 }

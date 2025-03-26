@@ -5,7 +5,7 @@
 
 #define TEST_SUBROUTE(FUNC)                                                                                            \
     TEST_C_API void s_ntest_body_##FUNC(void);                                                                         \
-    TEST_INITIALIZER(ntest_##fixture##_##test##_##id)                                                                  \
+    TEST_INITIALIZER(ntest_initializer_##FUNC)                                                                         \
     {                                                                                                                  \
         static test_slice_t slice = {                                                                                  \
             EV_MAP_NODE_INIT,                                                                                          \

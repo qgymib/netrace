@@ -71,12 +71,12 @@ typedef struct sock_node
 typedef struct prog_node
 {
     ev_map_node_t node;
-    pid_t         pid;                    /* Process ID. */
-    ev_map_t      sock_map;               /* Program socket map. Type: #sock_node_t. */
-    sock_node_t*  sock_last;              /* Last socket we are tracing. */
-    int           syscall;                /* System call number. */
-    int           flag_setup : 1;         /* Is setup done. */
-    int           flag_syscall_enter : 1; /* Is entry syscall. */
+    pid_t         pid;                /* Process ID. */
+    ev_map_t      sock_map;           /* Program socket map. Type: #sock_node_t. */
+    sock_node_t*  sock_last;          /* Last socket we are tracing. */
+    int           syscall;            /* System call number. */
+    int           flag_setup;         /* Is setup done. */
+    int           flag_syscall_enter; /* Is entry syscall. */
 } prog_node_t;
 
 typedef struct runtime
