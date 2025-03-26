@@ -3,6 +3,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 #define LOG_D(fmt, ...) nt_log(NT_LOG_DEBUG, __FILE__, __FUNCTION__, __LINE__, fmt, ##__VA_ARGS__)
 #define LOG_I(fmt, ...) nt_log(NT_LOG_INFO, __FILE__, __FUNCTION__, __LINE__, fmt, ##__VA_ARGS__)
@@ -10,15 +11,19 @@
 #define LOG_E(fmt, ...) nt_log(NT_LOG_ERROR, __FILE__, __FUNCTION__, __LINE__, fmt, ##__VA_ARGS__)
 
 /**
- * @brief Fatal log
- * @warning A fatal log will abort the program.
- * @param[in] fmt Format string.
+ * @brief Assert condition is established.
+ * @note It is not affected by #NDEBUG.
  */
-#define LOG_F_ABORT(fmt, ...)                                                                                          \
-    do                                                                                                                 \
-    {                                                                                                                  \
-        nt_log(NT_LOG_FATAL, __FILE__, __FUNCTION__, __LINE__, fmt, ##__VA_ARGS__);                                    \
-        abort();                                                                                                       \
+#define NT_ASSERT(a, OP, b, fmt, ...)                                                              \
+    do                                                                                             \
+    {                                                                                              \
+        if ((a)OP(b))                                                                              \
+        {                                                                                          \
+            break;                                                                                 \
+        }                                                                                          \
+        fprintf(stderr, "%s:%d: %s: Assertion `%s %s %s` failed: " fmt ".\n", __FILE__, __LINE__,  \
+                __FUNCTION__, #a, #OP, #b, ##__VA_ARGS__);                                         \
+        abort();                                                                                   \
     } while (0)
 
 #ifdef __cplusplus
@@ -35,7 +40,9 @@ typedef enum nt_log_level
     NT_LOG_FATAL,
 } nt_log_level_t;
 
-void nt_log(nt_log_level_t level, const char* file, const char* func, int line, const char* fmt, ...);
+void nt_log(nt_log_level_t level, const char* file, const char* func, int line, const char* fmt,
+            ...);
+const char* nt_basename(const char* path);
 
 #ifdef __cplusplus
 }

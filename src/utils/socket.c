@@ -4,6 +4,7 @@
 #include <fcntl.h>
 #include <arpa/inet.h>
 #include <sys/ioctl.h>
+#include "utils/defs.h"
 #include "utils/socket.h"
 
 int nt_ip_addr(const char* ip, uint16_t port, struct sockaddr* addr)
@@ -27,9 +28,9 @@ int nt_ip_addr(const char* ip, uint16_t port, struct sockaddr* addr)
 
     if (ret == 0)
     { /* ip not contain a character string representing a valid network address. */
-        return EINVAL;
+        return NT_ERR(EINVAL);
     }
-    return ret == 1 ? 0 : errno;
+    return ret == 1 ? 0 : NT_ERR(errno);
 }
 
 int nt_ip_name(const struct sockaddr* addr, char* ip, size_t len, int* port)
@@ -44,7 +45,7 @@ int nt_ip_name(const struct sockaddr* addr, char* ip, size_t len, int* port)
 
         if (ip != NULL)
         {
-            return inet_ntop(AF_INET, &p_addr->sin_addr, ip, len) != NULL ? 0 : ENOSPC;
+            return inet_ntop(AF_INET, &p_addr->sin_addr, ip, len) != NULL ? 0 : NT_ERR(ENOSPC);
         }
     }
     else
@@ -56,7 +57,7 @@ int nt_ip_name(const struct sockaddr* addr, char* ip, size_t len, int* port)
         }
         if (ip != NULL)
         {
-            return inet_ntop(AF_INET6, &p_addr->sin6_addr, ip, len) != NULL ? 0 : ENOSPC;
+            return inet_ntop(AF_INET6, &p_addr->sin6_addr, ip, len) != NULL ? 0 : NT_ERR(ENOSPC);
         }
     }
 
@@ -65,8 +66,9 @@ int nt_ip_name(const struct sockaddr* addr, char* ip, size_t len, int* port)
 
 int nt_nonblock(int fd, int set)
 {
-#if defined(_AIX) || defined(__APPLE__) || defined(__DragonFly__) || defined(__FreeBSD__) ||                           \
-    defined(__FreeBSD_kernel__) || defined(__linux__) || defined(__OpenBSD__) || defined(__NetBSD__)
+#if defined(_AIX) || defined(__APPLE__) || defined(__DragonFly__) || defined(__FreeBSD__) ||       \
+    defined(__FreeBSD_kernel__) || defined(__linux__) || defined(__OpenBSD__) ||                   \
+    defined(__NetBSD__)
     int r;
 
     do
@@ -76,7 +78,7 @@ int nt_nonblock(int fd, int set)
 
     if (r)
     {
-        return errno;
+        return NT_ERR(errno);
     }
 
     return 0;
@@ -86,7 +88,7 @@ int nt_nonblock(int fd, int set)
     int r = fcntl(fd, F_GETFL);
     if (r == -1)
     {
-        return errno;
+        return NT_ERR(errno);
     }
 
     /* Bail out now if already set/clear. */
@@ -111,7 +113,7 @@ int nt_nonblock(int fd, int set)
 
     if (r)
     {
-        return errno;
+        return NT_ERR(errno);
     }
 
     return 0;
@@ -140,6 +142,7 @@ ssize_t nt_write(int fd, const void* buf, size_t size)
 
 void nt_sockaddr_copy(struct sockaddr* dst, const struct sockaddr* src)
 {
-    size_t copy_sz = src->sa_family == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
+    size_t copy_sz =
+        src->sa_family == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
     memcpy(dst, src, copy_sz);
 }

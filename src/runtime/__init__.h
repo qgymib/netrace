@@ -22,8 +22,8 @@ typedef struct nt_proxy
      * @param[in] thiz  Object handle.
      * @param[in] type SOCK_STREAM / SOCK_DGRAM
      * @param[in] peeraddr Peer address.
-     * @param[out] proxyaddr For SOCK_STREAM, this is the address connect to. For SOCK_DGRAM, this is the address
-     *   sendto. It is
+     * @param[out] proxyaddr For SOCK_STREAM, this is the address connect to. For SOCK_DGRAM, this
+     * is the address sendto. It is
      * @return Channel handle.
      */
     int (*channel_create)(struct nt_proxy* thiz, int type, const struct sockaddr* peeraddr,
@@ -71,12 +71,12 @@ typedef struct sock_node
 typedef struct prog_node
 {
     ev_map_node_t node;
-    pid_t         pid;                /* Process ID. */
-    ev_map_t      sock_map;           /* Program socket map. Type: #sock_node_t. */
-    sock_node_t*  sock_last;          /* Last socket we are tracing. */
-    int           syscall;            /* System call number. */
-    int           flag_setup;         /* Is setup done. */
-    int           flag_syscall_enter; /* Is entry syscall. */
+    pid_t         pid;          /* Process ID. */
+    ev_map_t      sock_map;     /* Program socket map. Type: #sock_node_t. */
+    sock_node_t*  sock_last;    /* Last socket we are tracing. */
+    int           syscall;      /* System call number. */
+    int           b_setup;      /* Is setup done. */
+    int           b_in_syscall; /* Is entry syscall. */
 } prog_node_t;
 
 typedef struct runtime

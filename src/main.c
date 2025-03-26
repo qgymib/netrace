@@ -29,7 +29,7 @@
     xx(SYS_socket,  s_trace_syscall_socket_enter,   s_trace_syscall_socket_leave)   \
     xx(SYS_close,   s_trace_syscall_close_enter,    SYSCALL_SKIP)                   \
     xx(SYS_connect, s_trace_syscall_connect_enter,  s_trace_syscall_connect_leave)  \
-    xx(SYS_clone,   s_trace_syscall_clone_enter,    SYSCALL_SKIP)
+    xx(SYS_clone,   SYSCALL_SKIP,                   SYSCALL_SKIP)
 // clang-format on
 
 static int do_child()
@@ -64,14 +64,15 @@ static int do_child()
 
 static void s_trace_setup(prog_node_t* info)
 {
-    info->flag_setup = 1;
+    info->b_setup = 1;
 
     /* Ask to trace fork() family, so we can keep eye on grandchild. */
-    long trace_option = PTRACE_O_TRACECLONE | PTRACE_O_TRACEEXEC | PTRACE_O_TRACEFORK | PTRACE_O_TRACEVFORK;
-    if (ptrace(PTRACE_SETOPTIONS, info->pid, 0, trace_option) < 0)
-    {
-        LOG_F_ABORT("ptrace() failed: (%d) %s.", errno, strerror(errno));
-    }
+    long trace_option =
+        PTRACE_O_TRACECLONE | PTRACE_O_TRACEEXEC | PTRACE_O_TRACEFORK | PTRACE_O_TRACEVFORK;
+    /* clang-format off */
+    NT_ASSERT(ptrace(PTRACE_SETOPTIONS, info->pid, 0, trace_option), ==, 0,
+        "(%d) %s", errno, strerror(errno));
+    /* clang-format on */
     LOG_D("pid=%d setup ptrace.", info->pid);
 }
 
@@ -96,7 +97,8 @@ static void s_check_child_exit_reason(void)
         read_sz = read(G->prog_pipe[0], &code, sizeof(code));
     } while (read_sz < 0 && errno == EINTR);
 
-    /* There are error from child process, probably because invalid program path. */
+    /* There are error from child process, probably because invalid program
+     * path. */
     if (read_sz > 0)
     {
         LOG_E("Child process raise error: (%d) %s.", code, strerror(code));
@@ -104,10 +106,7 @@ static void s_check_child_exit_reason(void)
     }
 
     /* There are error from pipe. */
-    if (read_sz < 0)
-    {
-        LOG_F_ABORT("Pipe error: (%d) %s.", errno, strerror(errno));
-    }
+    NT_ASSERT(read_sz, ==, 0, "Pipe error: (%d) %s.", errno, strerror(errno));
 
     /* Pipe closed, child exec() success. */
 }
@@ -120,10 +119,10 @@ static void s_trace_syscall_socket_enter(prog_node_t* prog)
     sock->socket_type = nt_get_syscall_arg(prog->pid, 1) & 0xFF;
     sock->socket_protocol = nt_get_syscall_arg(prog->pid, 2);
 
-    if (ev_map_insert(&prog->sock_map, &sock->node) != NULL)
-    {
-        LOG_F_ABORT("Conflict node: pid=%d, fd=%d.", prog->pid, sock->fd);
-    }
+    /* clang-format off */
+    NT_ASSERT(ev_map_insert(&prog->sock_map, &sock->node), ==, NULL,
+        "Conflict node: pid=%d, fd=%d.", prog->pid, sock->fd);
+    /* clang-format on */
     prog->sock_last = sock;
 }
 
@@ -136,18 +135,18 @@ static void s_trace_syscall_socket_leave(prog_node_t* prog)
     ev_map_erase(&prog->sock_map, &sock->node);
     if ((sock->fd = nt_get_syscall_ret(prog->pid)) < 0)
     {
-        LOG_D("pid=%d ignore socket=%d domain=%d type=%d protocol=%d.", prog->pid, sock->fd, sock->socket_domain,
-              sock->socket_type, sock->socket_protocol);
+        LOG_D("pid=%d ignore socket=%d domain=%d type=%d protocol=%d.", prog->pid, sock->fd,
+              sock->socket_domain, sock->socket_type, sock->socket_protocol);
         nt_sock_node_release(sock);
         return;
     }
 
-    if (ev_map_insert(&prog->sock_map, &sock->node) != NULL)
-    {
-        LOG_F_ABORT("Conflict node: pid=%d, fd=%d.", prog->pid, sock->fd);
-    }
-    LOG_D("pid=%d socket=%d domain=%d type=%d protocol=%d.", prog->pid, sock->fd, sock->socket_domain,
-          sock->socket_type, sock->socket_protocol);
+    /* clang-format off */
+    NT_ASSERT(ev_map_insert(&prog->sock_map, &sock->node), ==, NULL,
+        "Conflict node: pid=%d, fd=%d.", prog->pid, sock->fd);
+    /* clang-format on */
+    LOG_D("pid=%d socket=%d domain=%d type=%d protocol=%d.", prog->pid, sock->fd,
+          sock->socket_domain, sock->socket_type, sock->socket_protocol);
 }
 
 static void s_trace_syscall_close_enter(prog_node_t* prog)
@@ -164,14 +163,6 @@ static void s_trace_syscall_close_enter(prog_node_t* prog)
     LOG_D("pid=%d close socket=%d", prog->pid, sock->fd);
     ev_map_erase(&prog->sock_map, &sock->node);
     nt_sock_node_release(sock);
-}
-
-static void s_trace_syscall_clone_enter(prog_node_t* prog)
-{
-    /*
-     * Special handling for clone(), because it has no leaving.
-     */
-    prog->flag_syscall_enter = 0;
 }
 
 static void s_trace_syscall_connect_enter(prog_node_t* prog)
@@ -199,15 +190,16 @@ static void s_trace_syscall_connect_enter(prog_node_t* prog)
 
     /* Create proxy channel. */
     struct sockaddr_storage proxyaddr;
-    sock->channel =
-        G->proxy->channel_create(G->proxy, sock->socket_type, (struct sockaddr*)&sock->orig_addr, &proxyaddr);
+    sock->channel = G->proxy->channel_create(G->proxy, sock->socket_type,
+                                             (struct sockaddr*)&sock->orig_addr, &proxyaddr);
     if (sock->channel < 0)
     {
         return;
     }
 
     /* Overwrite connect address. */
-    size_t newaddrlen = proxyaddr.ss_family == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
+    size_t newaddrlen =
+        proxyaddr.ss_family == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
     nt_syscall_setdata(prog->pid, p_sockaddr, &proxyaddr, newaddrlen);
 }
 
@@ -218,46 +210,62 @@ static void s_trace_syscall_connect_leave(prog_node_t* prog)
     sock_node_t* sock = prog->sock_last;
     if (sock != NULL)
     {
-        size_t data_sz =
-            sock->orig_addr.ss_family == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
+        size_t data_sz = sock->orig_addr.ss_family == AF_INET ? sizeof(struct sockaddr_in)
+                                                              : sizeof(struct sockaddr_in6);
         nt_syscall_setdata(prog->pid, p_sockaddr, &sock->orig_addr, data_sz);
     }
 
     prog->sock_last = NULL;
 }
 
+static void s_trace_syscall_enter(prog_node_t* info)
+{
+    switch (info->syscall)
+    {
+        // clang-format off
+#define EXPAND_SYSCALL(ID, ENTER, _) case ID: ENTER(info); break;
+    SYSCALL_TRACING_TABLE(EXPAND_SYSCALL)
+#undef EXPAND_SYSCALL
+        // clang-format on
+    default:
+    }
+}
+
+static void s_trace_syscall_leave(prog_node_t* info)
+{
+    switch (info->syscall)
+    {
+        // clang-format off
+#define EXPAND_SYSCALL(ID, _, LEAVE) case ID: LEAVE(info); break;
+    SYSCALL_TRACING_TABLE(EXPAND_SYSCALL)
+#undef EXPAND_SYSCALL
+        // clang-format on
+    default:
+    }
+}
+
 static void s_trace_syscall(prog_node_t* info)
 {
-    if (!info->flag_syscall_enter)
+    if (!info->b_in_syscall)
     {
-        info->flag_syscall_enter = 1;
-
         info->syscall = nt_get_syscall_id(info->pid);
-        switch (info->syscall)
-        {
-            // clang-format off
-#define EXPAND_SYSCALL(ID, ENTER, _) case ID: ENTER(info); break;
-        SYSCALL_TRACING_TABLE(EXPAND_SYSCALL)
-#undef EXPAND_SYSCALL
-            // clang-format on
-        default:
-        }
+
+    SYSCALL_ENTER:
+        info->b_in_syscall = 1;
+        s_trace_syscall_enter(info);
     }
     else
     {
-        info->flag_syscall_enter = 0;
         int syscall = nt_get_syscall_id(info->pid);
-        assert(syscall == info->syscall);
-
-        switch (info->syscall)
+        if (syscall != info->syscall)
         {
-            // clang-format off
-#define EXPAND_SYSCALL(ID, _, LEAVE) case ID: LEAVE(info); break;
-        SYSCALL_TRACING_TABLE(EXPAND_SYSCALL)
-#undef EXPAND_SYSCALL
-            // clang-format on
-        default:
+            LOG_I("syscall mismatch: pid=%d old=%d new=%d.", info->pid, info->syscall, syscall);
+            info->syscall = syscall;
+            goto SYSCALL_ENTER;
         }
+
+        info->b_in_syscall = 0;
+        s_trace_syscall_leave(info);
     }
 }
 
@@ -302,7 +310,7 @@ static void do_trace()
             int sig = WSTOPSIG(status);
             if (sig == SIGTRAP)
             {
-                if (!info->flag_setup)
+                if (!info->b_setup)
                 { /* execve() */
                     s_trace_setup(info);
                 }
@@ -314,18 +322,15 @@ static void do_trace()
             }
             else if (sig == SIGSTOP)
             {
-                if (!info->flag_setup)
+                if (!info->b_setup)
                 { /* clone() / fork() / vfork() */
                     s_trace_setup(info);
                     sig = 0;
                 }
             }
 
-            if (ptrace(PTRACE_SYSCALL, pid, 0, sig) < 0)
-            {
-                LOG_F_ABORT("ptrace() failed: (%d) %s.", errno, strerror(errno));
-            }
-
+            NT_ASSERT(ptrace(PTRACE_SYSCALL, pid, 0, sig), ==, 0, "(%d) %s", errno,
+                      strerror(errno));
             continue;
         }
 
@@ -341,7 +346,8 @@ static void do_trace()
                 else
                 {
                     G->prog_exit_retval = EXIT_FAILURE;
-                    LOG_W("`%s` exit abnormal, set our exitcode to %d.", G->prog_args[0], G->prog_exit_retval);
+                    LOG_W("`%s` exit abnormal, set our exitcode to %d.", G->prog_args[0],
+                          G->prog_exit_retval);
                 }
             }
 
@@ -377,17 +383,13 @@ int main(int argc, char* argv[])
     /* Initialize global runtime. */
     nt_runtime_init(argc, argv);
 
-    /* Setup pipe between parent and child, to see if there are any error before executing program. */
-    if (pipe2(G->prog_pipe, O_CLOEXEC) < 0)
-    {
-        LOG_F_ABORT("pipe2() failed: (%d) %s.", errno, strerror(errno));
-    }
+    /* Setup pipe between parent and child, to see if there are any error before
+     * executing program. */
+    NT_ASSERT(pipe2(G->prog_pipe, O_CLOEXEC), ==, 0, "(%d) %s", errno, strerror(errno));
 
-    if ((G->prog_pid = fork()) < 0)
-    {
-        int code = errno;
-        LOG_F_ABORT("fork() failed: (%d) %s.", code, strerror(code));
-    }
+    G->prog_pid = fork();
+    NT_ASSERT(G->prog_pid, >=, 0, "fork() failed: (%d) %s.", errno, strerror(errno));
+
     if (G->prog_pid == 0)
     {
         return do_child();

@@ -5,7 +5,7 @@
 
 static const char* s_log_str[] = { "T", "D", "I", "W", "E", "F" };
 
-static const char* s_basename(const char* path)
+const char* nt_basename(const char* path)
 {
     const char* pos = path;
 
@@ -24,9 +24,10 @@ static const char* s_basename(const char* path)
     return pos;
 }
 
-void nt_log(nt_log_level_t level, const char* file, const char* func, int line, const char* fmt, ...)
+void nt_log(nt_log_level_t level, const char* file, const char* func, int line, const char* fmt,
+            ...)
 {
-    file = s_basename(file);
+    file = nt_basename(file);
     fprintf(stderr, "[%s][%s:%d][%s] ", s_log_str[level], file, line, func);
 
     va_list ap;

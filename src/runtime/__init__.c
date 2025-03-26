@@ -236,7 +236,7 @@ int nt_proxy_create(nt_proxy_t** proxy, const char* url)
     }
 
     LOG_E("Unknown protocol `%s`.", components->scheme);
-    ret = ENOTSUP;
+    ret = NT_ERR(ENOTSUP);
 
 finish:
     nt_url_components_free(components);

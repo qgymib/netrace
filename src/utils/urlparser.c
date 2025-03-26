@@ -1,6 +1,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
+#include "utils/defs.h"
 #include "utils/memory.h"
 #include "urlparser.h"
 
@@ -11,7 +12,7 @@ int nt_url_components_parser(url_components_t** components, const char* url)
     const char*       scheme_eol = strstr(url, "://");
     if (scheme_eol == NULL)
     {
-        ret = EINVAL;
+        ret = NT_ERR(EINVAL);
         goto ERR;
     }
     comp->scheme = nt_strndup(url, scheme_eol - url);
@@ -37,7 +38,7 @@ int nt_url_components_parser(url_components_t** components, const char* url)
         comp->port = nt_malloc(sizeof(*comp->port));
         if (sscanf(host_eol + 1, "%u", comp->port) != 1)
         {
-            ret = EINVAL;
+            ret = NT_ERR(EINVAL);
             goto ERR;
         }
     }

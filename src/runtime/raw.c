@@ -21,16 +21,16 @@ typedef struct raw_sock
 
 typedef struct proxy_raw_channel
 {
-    ev_map_node_t           node;
-    int                     chid; /* Channel ID. */
-    int                     type; /* SOCK_STREAM / SOCK_DGRAM */
-    int                     islisten;
-    raw_sock_t              inbound;
-    raw_sock_t              outbound;
-    size_t                  ubuf_sz;
-    size_t                  dbuf_sz;
-    uint8_t                 ubuf[NT_SOCKET_BUFFER_SIZE]; /* Upload buffer. Read from inbound, and send to outbound. */
-    uint8_t                 dbuf[NT_SOCKET_BUFFER_SIZE]; /* Download buffer. Read from outbound, and send to inbound. */
+    ev_map_node_t node;
+    int           chid; /* Channel ID. */
+    int           type; /* SOCK_STREAM / SOCK_DGRAM */
+    int           islisten;
+    raw_sock_t    inbound;
+    raw_sock_t    outbound;
+    size_t        ubuf_sz;
+    size_t        dbuf_sz;
+    uint8_t       ubuf[NT_SOCKET_BUFFER_SIZE]; /* Upload buffer. From inbound to outbound. */
+    uint8_t       dbuf[NT_SOCKET_BUFFER_SIZE]; /* Download buffer. From outbound to inbound. */
     struct sockaddr_storage localaddr;
     struct sockaddr_storage peeraddr;
 } proxy_raw_channel_t;
@@ -218,7 +218,8 @@ static int s_proxy_new_channel_tcp(proxy_raw_channel_t* ch)
     }
     nt_nonblock(ch->outbound.event.data.fd, 1);
 
-    if (connect(ch->outbound.event.data.fd, (struct sockaddr*)&ch->peeraddr, sizeof(ch->peeraddr)) < 0)
+    if (connect(ch->outbound.event.data.fd, (struct sockaddr*)&ch->peeraddr, sizeof(ch->peeraddr)) <
+        0)
     {
         ret = errno;
         if (ret != EAGAIN && ret != EINPROGRESS)
@@ -237,7 +238,8 @@ ERR_BIND:
     return ret;
 }
 
-static int s_proxy_raw_channel_create(struct nt_proxy* thiz, int type, const struct sockaddr* peeraddr,
+static int s_proxy_raw_channel_create(struct nt_proxy* thiz, int type,
+                                      const struct sockaddr*   peeraddr,
                                       struct sockaddr_storage* proxyaddr)
 {
     nt_proxy_raw_t*      raw = container_of(thiz, nt_proxy_raw_t, basis);
@@ -276,7 +278,8 @@ static int s_proxy_raw_channel_create(struct nt_proxy* thiz, int type, const str
     return chid;
 }
 
-static void s_proxy_raw_handle_event_channel_create(nt_proxy_raw_t* raw, proxy_raw_channel_t* channel)
+static void s_proxy_raw_handle_event_channel_create(nt_proxy_raw_t*      raw,
+                                                    proxy_raw_channel_t* channel)
 {
     if (channel->inbound.event.data.fd >= 0)
     {
@@ -291,7 +294,8 @@ static void s_proxy_raw_handle_event_channel_create(nt_proxy_raw_t* raw, proxy_r
     if (channel->type == SOCK_STREAM)
     {
         channel->inbound.event.events = EPOLLIN;
-        epoll_ctl(raw->epollfd, EPOLL_CTL_ADD, channel->inbound.event.data.fd, &channel->inbound.event);
+        epoll_ctl(raw->epollfd, EPOLL_CTL_ADD, channel->inbound.event.data.fd,
+                  &channel->inbound.event);
         return;
     }
 }
@@ -307,8 +311,8 @@ static void s_proxy_raw_handle_event_channel_release(nt_proxy_raw_t* raw, int ch
     }
 
     /*
-     * Release channel means this side need to close, but it does not means peer should be closed now
-     * This is because ubuf maybe not empty.
+     * Release channel means this side need to close, but it does not means peer
+     * should be closed now This is because ubuf maybe not empty.
      */
     proxy_raw_channel_t* ch = container_of(it, proxy_raw_channel_t, node);
     s_proxy_raw_close_inbound_channel(raw, ch);
@@ -384,7 +388,8 @@ static void s_proxy_raw_handle_inbound_w(nt_proxy_raw_t* raw, proxy_raw_channel_
     }
 
     /* If dbuf is not full, continue reading from outbound. */
-    if (ch->dbuf_sz < sizeof(ch->dbuf) && ch->outbound.event.data.fd >= 0 && !(ch->outbound.event.events & EPOLLIN))
+    if (ch->dbuf_sz < sizeof(ch->dbuf) && ch->outbound.event.data.fd >= 0 &&
+        !(ch->outbound.event.events & EPOLLIN))
     {
         int op = ch->outbound.event.events == 0 ? EPOLL_CTL_ADD : EPOLL_CTL_MOD;
         ch->outbound.event.events |= EPOLLIN;
@@ -442,7 +447,8 @@ static void s_proxy_raw_handle_inbound_tcp_r(nt_proxy_raw_t* raw, proxy_raw_chan
     }
 
     /* Write to outbound. */
-    if (ch->outbound.event.data.fd >= 0 && ch->ubuf_sz > 0 && !(ch->outbound.event.events & EPOLLOUT))
+    if (ch->outbound.event.data.fd >= 0 && ch->ubuf_sz > 0 &&
+        !(ch->outbound.event.events & EPOLLOUT))
     {
         int op = ch->outbound.event.events == 0 ? EPOLL_CTL_ADD : EPOLL_CTL_MOD;
         ch->outbound.event.events |= EPOLLOUT;
@@ -565,7 +571,8 @@ static void s_proxy_raw_handle_outbound_r(nt_proxy_raw_t* raw, proxy_raw_channel
     }
 }
 
-static void s_proxy_raw_handle_channel(nt_proxy_raw_t* raw, proxy_raw_channel_t* ch, struct epoll_event* event)
+static void s_proxy_raw_handle_channel(nt_proxy_raw_t* raw, proxy_raw_channel_t* ch,
+                                       struct epoll_event* event)
 {
     if (ch->inbound.event.data.fd == event->data.fd)
     {
@@ -631,11 +638,8 @@ static void* s_proxy_raw_loop(void* arg)
         }
         else if (ret < 0)
         {
-            if (errno == EINTR)
-            {
-                continue;
-            }
-            LOG_F_ABORT("epoll_wait() failed: (%d) %s.", errno, strerror(errno));
+            NT_ASSERT(errno, ==, EINTR, "epoll_wait() failed: (%d) %s.", errno, strerror(errno));
+            continue;
         }
 
         for (i = 0; i < ret; i++)
@@ -656,7 +660,8 @@ static int s_proxy_raw_on_cmp_sock(const ev_map_node_t* key1, const ev_map_node_
     return s1->event.data.fd - s2->event.data.fd;
 }
 
-static int s_proxy_raw_on_cmp_channel(const ev_map_node_t* key1, const ev_map_node_t* key2, void* arg)
+static int s_proxy_raw_on_cmp_channel(const ev_map_node_t* key1, const ev_map_node_t* key2,
+                                      void* arg)
 {
     (void)arg;
     const proxy_raw_channel_t* ch1 = container_of(key1, proxy_raw_channel_t, node);
