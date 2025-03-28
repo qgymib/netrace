@@ -82,8 +82,10 @@ typedef struct prog_node
 
 typedef struct runtime
 {
-    char*          proxy_url; /* Socks5 address. */
-    nt_proxy_t*    proxy;     /* Proxy object. */
+    const char* opt_proxy;  /* --proxy */
+    const char* opt_bypass; /* --bypass */
+
+    nt_proxy_t*    proxy; /* Proxy object. */
     nt_ipfilter_t* ipfilter;
 
     char**   prog_args;        /* Arguments for child program, ending with NULL. */
