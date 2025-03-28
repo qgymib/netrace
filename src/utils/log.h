@@ -26,6 +26,16 @@
         abort();                                                                                   \
     } while (0)
 
+/**
+ * @brief Dump data into hex and print.
+ */
+#define NT_DUMP(data, size)                                                                        \
+    do                                                                                             \
+    {                                                                                              \
+        LOG_D("DUMP: %s:", #data);                                                                 \
+        nt_dump(data, size, 16);                                                                   \
+    } while (0)
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -42,6 +52,7 @@ typedef enum nt_log_level
 
 void nt_log(nt_log_level_t level, const char* file, const char* func, int line, const char* fmt,
             ...);
+void nt_dump(const void* data, size_t size, size_t width);
 const char* nt_basename(const char* path);
 
 #ifdef __cplusplus

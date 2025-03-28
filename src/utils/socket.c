@@ -146,3 +146,21 @@ void nt_sockaddr_copy(struct sockaddr* dst, const struct sockaddr* src)
         src->sa_family == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
     memcpy(dst, src, copy_sz);
 }
+
+const char* nt_socktype_name(int type)
+{
+    switch (type)
+    {
+        /* clang-format off */
+    case SOCK_STREAM:       return "tcp";
+    case SOCK_DGRAM:        return "udp";
+    case SOCK_SEQPACKET:    return "seqpacket";
+    case SOCK_RAW:          return "raw";
+    case SOCK_RDM:          return "drm";
+    case SOCK_PACKET:       return "packet";
+    default:                break;
+        /* clang-format on */
+    }
+
+    return "unknown";
+}

@@ -9,11 +9,34 @@
 #include "config.h"
 #include "__init__.h"
 
+typedef struct nt_ipfilter_item
+{
+    int         type;
+    const char* ip;
+    unsigned    mask;
+    unsigned    port;
+} nt_ipfilter_item_t;
+
 runtime_t* G = NULL;
 
 static const nt_proxy_protocol_t* s_protocols[] = {
     &nt_proxy_protocol_raw,
     &nt_proxy_protocol_socks5,
+};
+
+static const nt_ipfilter_item_t s_ipfilter[] = {
+    /* Ignore loopback */
+    { SOCK_STREAM, "127.0.0.1",   32,  0 },
+    { SOCK_STREAM, "::1",         128, 0 },
+    { SOCK_DGRAM,  "127.0.0.1",   32,  0 },
+    { SOCK_DGRAM,  "::1",         128, 0 },
+    /* Ignore LAN. */
+    { SOCK_STREAM, "10.0.0.0",    8,   0 },
+    { SOCK_STREAM, "172.16.0.0",  12,  0 },
+    { SOCK_STREAM, "192.168.0.0", 16,  0 },
+    { SOCK_DGRAM,  "10.0.0.0",    8,   0 },
+    { SOCK_DGRAM,  "172.16.0.0",  12,  0 },
+    { SOCK_DGRAM,  "192.168.0.0", 16,  0 },
 };
 
 // clang-format off
@@ -120,7 +143,8 @@ static void s_setup_cmdline(int argc, char* argv[])
     }
     if (G->proxy_url == NULL)
     {
-        G->proxy_url = nt_strdup("socks5://" NT_DEFAULT_SOCKS5_ADDR ":" STRINGIFY(NT_DEFAULT_SOCKS5_PORT));
+        G->proxy_url =
+            nt_strdup("socks5://" NT_DEFAULT_SOCKS5_ADDR ":" STRINGIFY(NT_DEFAULT_SOCKS5_PORT));
     }
 }
 
@@ -150,12 +174,26 @@ void nt_sock_node_release(sock_node_t* sock)
 
 void nt_runtime_init(int argc, char* argv[])
 {
+    int ret;
     G = nt_calloc(1, sizeof(*G));
     G->prog_pid = -1;
     G->prog_pipe[0] = -1;
     G->prog_pipe[1] = -1;
     ev_map_init(&G->prog_map, s_on_cmp_prog, NULL);
     s_setup_cmdline(argc, argv);
+    G->ipfilter = nt_ipfilter_create();
+
+    size_t i;
+    for (i = 0; i < ARRAY_SIZE(s_ipfilter); i++)
+    {
+        const nt_ipfilter_item_t* item = &s_ipfilter[i];
+        if ((ret = nt_ipfiter_add(G->ipfilter, item->type, item->ip, item->mask, item->port)) != 0)
+        {
+            LOG_E("Add ipfilter failed: type=%d, ip=%s, mask=%u, port=%u", item->type, item->ip,
+                  item->mask, item->port);
+            exit(EXIT_FAILURE);
+        }
+    }
 
     if (nt_proxy_create(&G->proxy, G->proxy_url) != 0)
     {
@@ -208,6 +246,11 @@ void nt_runtime_cleanup(void)
     {
         close(G->prog_pipe[1]);
         G->prog_pipe[1] = -1;
+    }
+    if (G->ipfilter != NULL)
+    {
+        nt_ipfilter_destroy(G->ipfilter);
+        G->ipfilter = NULL;
     }
 
     nt_free(G);

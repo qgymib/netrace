@@ -115,9 +115,9 @@ static void s_trace_syscall_socket_enter(prog_node_t* prog)
 {
     sock_node_t* sock = nt_calloc(1, sizeof(sock_node_t));
     sock->fd = -1;
-    sock->socket_domain = nt_get_syscall_arg(prog->pid, 0);
-    sock->socket_type = nt_get_syscall_arg(prog->pid, 1) & 0xFF;
-    sock->socket_protocol = nt_get_syscall_arg(prog->pid, 2);
+    sock->domain = nt_get_syscall_arg(prog->pid, 0);
+    sock->type = nt_get_syscall_arg(prog->pid, 1) & 0xFF;
+    sock->protocol = nt_get_syscall_arg(prog->pid, 2);
 
     /* clang-format off */
     NT_ASSERT(ev_map_insert(&prog->sock_map, &sock->node), ==, NULL,
@@ -136,7 +136,7 @@ static void s_trace_syscall_socket_leave(prog_node_t* prog)
     if ((sock->fd = nt_get_syscall_ret(prog->pid)) < 0)
     {
         LOG_D("pid=%d ignore socket=%d domain=%d type=%d protocol=%d.", prog->pid, sock->fd,
-              sock->socket_domain, sock->socket_type, sock->socket_protocol);
+              sock->domain, sock->type, sock->protocol);
         nt_sock_node_release(sock);
         return;
     }
@@ -145,8 +145,8 @@ static void s_trace_syscall_socket_leave(prog_node_t* prog)
     NT_ASSERT(ev_map_insert(&prog->sock_map, &sock->node), ==, NULL,
         "Conflict node: pid=%d, fd=%d.", prog->pid, sock->fd);
     /* clang-format on */
-    LOG_D("pid=%d socket=%d domain=%d type=%d protocol=%d.", prog->pid, sock->fd,
-          sock->socket_domain, sock->socket_type, sock->socket_protocol);
+    LOG_D("pid=%d socket=%d domain=%d type=%d protocol=%d.", prog->pid, sock->fd, sock->domain,
+          sock->type, sock->protocol);
 }
 
 static void s_trace_syscall_close_enter(prog_node_t* prog)
@@ -182,16 +182,28 @@ static void s_trace_syscall_connect_enter(prog_node_t* prog)
 
     /* Backup connect address. */
     long p_sockaddr = nt_get_syscall_arg(prog->pid, 1);
-    nt_syscall_getdata(prog->pid, p_sockaddr, &sock->orig_addr, sizeof(struct sockaddr_in));
-    if (sock->orig_addr.ss_family == AF_INET6)
+    nt_syscall_getdata(prog->pid, p_sockaddr, &sock->peer_addr, sizeof(struct sockaddr_in));
+    if (sock->peer_addr.ss_family == AF_INET6)
     {
-        nt_syscall_getdata(prog->pid, p_sockaddr, &sock->orig_addr, sizeof(struct sockaddr_in6));
+        nt_syscall_getdata(prog->pid, p_sockaddr, &sock->peer_addr, sizeof(struct sockaddr_in6));
     }
+
+    char peer_ip[64];
+    int  peer_port = 0;
+    nt_ip_name((struct sockaddr*)&sock->peer_addr, peer_ip, sizeof(peer_ip), &peer_port);
+    const char* sock_type_name = nt_socktype_name(sock->type);
+
+    if (nt_ipfilter_check(G->ipfilter, sock->type, (struct sockaddr*)&sock->peer_addr))
+    {
+        LOG_I("Bypass %s://%s:%d", sock_type_name, peer_ip, peer_port);
+        return;
+    }
+    LOG_I("Redirect %s://%s:%d", sock_type_name, peer_ip, peer_port);
 
     /* Create proxy channel. */
     struct sockaddr_storage proxyaddr;
-    sock->channel = G->proxy->channel_create(G->proxy, sock->socket_type,
-                                             (struct sockaddr*)&sock->orig_addr, &proxyaddr);
+    sock->channel = G->proxy->channel_create(G->proxy, sock->type,
+                                             (struct sockaddr*)&sock->peer_addr, &proxyaddr);
     if (sock->channel < 0)
     {
         return;
@@ -210,9 +222,9 @@ static void s_trace_syscall_connect_leave(prog_node_t* prog)
     sock_node_t* sock = prog->sock_last;
     if (sock != NULL)
     {
-        size_t data_sz = sock->orig_addr.ss_family == AF_INET ? sizeof(struct sockaddr_in)
+        size_t data_sz = sock->peer_addr.ss_family == AF_INET ? sizeof(struct sockaddr_in)
                                                               : sizeof(struct sockaddr_in6);
-        nt_syscall_setdata(prog->pid, p_sockaddr, &sock->orig_addr, data_sz);
+        nt_syscall_setdata(prog->pid, p_sockaddr, &sock->peer_addr, data_sz);
     }
 
     prog->sock_last = NULL;

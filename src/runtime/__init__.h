@@ -4,6 +4,7 @@
 #include <netinet/in.h>
 #include "utils/map.h"
 #include "utils/urlparser.h"
+#include "utils/ipfilter.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -59,13 +60,13 @@ typedef struct nt_proxy_protocol
 
 typedef struct sock_node
 {
-    ev_map_node_t           node;
-    int                     fd;            /* Return value of child's socket(). */
-    int                     socket_domain; /* AF_INET/AF_INET6. */
-    int                     socket_type;   /* SOCK_STREAM/SOCK_DGRAM */
-    int                     socket_protocol;
-    int                     channel;
-    struct sockaddr_storage orig_addr; /* Orignal connect address. */
+    ev_map_node_t node;
+    int           fd;       /* Return value of child's socket(). */
+    int           domain;   /* socket(): AF_INET/AF_INET6. */
+    int           type;     /* socket(): #SOCK_STREAM / #SOCK_DGRAM */
+    int           protocol; /* socket(): particular protocol to be used with the socket. */
+    int           channel;
+    struct sockaddr_storage peer_addr; /* Orignal connect address. */
 } sock_node_t;
 
 typedef struct prog_node
@@ -81,8 +82,9 @@ typedef struct prog_node
 
 typedef struct runtime
 {
-    char*       proxy_url; /* Socks5 address. */
-    nt_proxy_t* proxy;     /* Proxy object. */
+    char*          proxy_url; /* Socks5 address. */
+    nt_proxy_t*    proxy;     /* Proxy object. */
+    nt_ipfilter_t* ipfilter;
 
     char**   prog_args;        /* Arguments for child program, ending with NULL. */
     pid_t    prog_pid;         /* First child pid. */

@@ -51,6 +51,13 @@ ssize_t nt_write(int fd, const void* buf, size_t size);
  */
 void nt_sockaddr_copy(struct sockaddr* dst, const struct sockaddr* src);
 
+/**
+ * @brief Get socket type name.
+ * @param[in] type
+ * @return Name string.
+ */
+const char* nt_socktype_name(int type);
+
 #ifdef __cplusplus
 }
 #endif
