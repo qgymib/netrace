@@ -4,6 +4,12 @@
 extern "C" {
 #endif
 
+typedef struct url_query
+{
+    char* k;
+    char* v;
+} url_query_t;
+
 typedef struct url_components
 {
     char*     scheme;
@@ -11,6 +17,9 @@ typedef struct url_components
     char*     password;
     char*     host;
     unsigned* port;
+
+    url_query_t* query;
+    size_t       query_sz;
 } url_components_t;
 
 int nt_url_components_parser(url_components_t** components, const char* url);
