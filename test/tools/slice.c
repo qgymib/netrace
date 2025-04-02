@@ -112,8 +112,9 @@ int nt_netrace_slice(const char* name, const char* data)
 {
     int wstatus = 0;
 
-    ASSERT_EQ_INT(nt_exec(&wstatus, g_test->netrace_path, "--proxy=raw://", g_test->netrace_test_path, "--", "slice", "--name", name,
-                          "--data", data, NULL),
+    ASSERT_EQ_INT(nt_exec(&wstatus, g_test->netrace_path, "--proxy=raw://", "--bypass=,",
+                          g_test->netrace_test_path, "--", "slice", "--name", name, "--data", data,
+                          NULL),
                   0);
     ASSERT_NE_INT(WIFEXITED(wstatus), 0);
     return WEXITSTATUS(wstatus);

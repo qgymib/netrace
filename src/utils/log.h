@@ -21,7 +21,7 @@
         {                                                                                          \
             break;                                                                                 \
         }                                                                                          \
-        fprintf(stderr, "%s:%d: %s: Assertion `%s %s %s` failed: " fmt ".\n", __FILE__, __LINE__,  \
+        fprintf(stderr, "%s:%d: %s: Assertion `%s %s %s` failed: " fmt "\n", __FILE__, __LINE__,  \
                 __FUNCTION__, #a, #OP, #b, ##__VA_ARGS__);                                         \
         abort();                                                                                   \
     } while (0)

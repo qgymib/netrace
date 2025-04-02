@@ -2,6 +2,7 @@
 #define NT_TEST_RUNTIME_H
 
 #include "cutest.h"
+#include "utils/log.h"
 
 #ifdef __cplusplus
 extern "C" {

@@ -1,5 +1,6 @@
 #undef NDEBUG
 #include <assert.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <pthread.h>
@@ -71,7 +72,7 @@ TEST_FIXTURE_TEARDOWN(grandchild)
 static void s_grandchild_connect_and_close(struct sockaddr_in* remote)
 {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
-    assert(fd >= 0);
+    NT_ASSERT(fd, >=, 0, "socket() failed: (%d) %s", errno, strerror(errno));
 
     assert(connect(fd, (struct sockaddr*)remote, sizeof(*remote)) == 0);
 
@@ -82,12 +83,19 @@ static void s_grandchild_connect_and_close(struct sockaddr_in* remote)
     assert(getpeername(fd, addr, &addrlen) == 0);
 
     /*
-     * The `remote_port` is where the test want to connect to. The `peer_port` is where the test actually connect to.
-     * Due to the destination is overwritten by netrace, these two address should be different.
+     *
+     *
      */
     int remote_port = ntohs(remote->sin_port);
     int peer_port = ntohs(peeraddr.sin_port);
-    assert(peer_port != remote_port);
+    /* clang-format off */
+    NT_ASSERT(peer_port, !=, remote_port,
+        "peer_port=%d, remote_port=%d.\n"
+        "The `remote_port` is where the test want to connect to. The `peer_port` is where\n"
+        "the test actually connect to. Due to the destination is overwritten by netrace,\n"
+        "these two value should be different."
+        , peer_port, remote_port);
+    /* clang-format on */
 
     close(fd);
 }

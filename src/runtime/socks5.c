@@ -262,7 +262,7 @@ static void s_nt_proxy_socks5_release(struct nt_proxy* thiz)
  * Syntax:
  * socks5://[user[:pass]@][host[:port]]
  */
-static int s_socks5_url_parser(nt_proxy_socks5_t* socks5, const url_components_t* url)
+static int s_socks5_url_parser(nt_proxy_socks5_t* socks5, const url_comp_t* url)
 {
     if (url->host == NULL)
     {
@@ -1315,7 +1315,7 @@ static void s_socks5_channel_release(struct nt_proxy* thiz, int channel)
     s_socks5_weakup(socks5);
 }
 
-static int s_socks5_create(nt_proxy_t** proxy, const url_components_t* url)
+static int s_socks5_create(nt_proxy_t** proxy, const url_comp_t* url)
 {
     int                ret = 0;
     nt_proxy_socks5_t* socks5 = nt_calloc(1, sizeof(nt_proxy_socks5_t));

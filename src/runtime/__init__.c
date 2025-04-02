@@ -9,6 +9,32 @@
 #include "config.h"
 #include "__init__.h"
 
+#define NT_CMD_PARSE_OPTION(val, opt)                                                              \
+    do                                                                                             \
+    {                                                                                              \
+        const char* _opt = (opt);                                                                  \
+        size_t      _optlen = strlen(_opt);                                                        \
+        if (strncmp(argv[i], _opt, _optlen) != 0)                                                  \
+        {                                                                                          \
+            break;                                                                                 \
+        }                                                                                          \
+        if (argv[i][_optlen] == '=')                                                               \
+        {                                                                                          \
+            val = &argv[i][_optlen + 1];                                                           \
+        }                                                                                          \
+        else if (i == argc - 1)                                                                    \
+        {                                                                                          \
+            fprintf(stderr, "Missing value for option `%s`.\n", _opt);                             \
+            exit(EXIT_FAILURE);                                                                    \
+        }                                                                                          \
+        else                                                                                       \
+        {                                                                                          \
+            i++;                                                                                   \
+            val = argv[i];                                                                         \
+        }                                                                                          \
+        continue;                                                                                  \
+    } while (0)
+
 typedef struct nt_ipfilter_item
 {
     int         type;
@@ -34,9 +60,11 @@ static const nt_ipfilter_item_t s_ipfilter[] = {
     { SOCK_STREAM, "10.0.0.0",    8,   0 },
     { SOCK_STREAM, "172.16.0.0",  12,  0 },
     { SOCK_STREAM, "192.168.0.0", 16,  0 },
+    { SOCK_STREAM, "fe80::",      10,  0 },
     { SOCK_DGRAM,  "10.0.0.0",    8,   0 },
     { SOCK_DGRAM,  "172.16.0.0",  12,  0 },
     { SOCK_DGRAM,  "192.168.0.0", 16,  0 },
+    { SOCK_DGRAM,  "fe80::",      10,  0 },
 };
 
 // clang-format off
@@ -46,6 +74,42 @@ CMAKE_PROJECT_NAME " - Trace and redirect network traffic (" CMAKE_PROJECT_VERSI
 "Options:\n"
 "  --proxy=socks5://[user[:pass]@][host[:port]]\n"
 "      Set socks5 address.\n"
+"\n"
+"  --filter=RULE_LIST\n"
+"      Syntax:\n"
+"        RULE_LIST    := [RULE[,RULE,...]]\n"
+"        RULE         := [default]\n"
+"                        [TYPE://ip[:port][/?OPTIONS]]\n"
+"        TYPE         := [tcp | udp]\n"
+"        OPTIONS      := [OPTION[&OPTION&...]]\n"
+"        OPTION       := [mask=NUMBER]\n"
+"\n"
+"      Description:\n"
+"        Do not redirect any traffic if it match any of the rules. By default\n"
+"        all traffics to LAN and loopback are ignored. By using this option,\n"
+"        the builtin filter rules are overwritten, however you can use `default`\n"
+"        keyword to add these rules again.\n"
+"\n"
+"        The `port` is optional. If it is set to non-zero, only traffic send to\n"
+"        that port is ignored.\n"
+"\n"
+"        The `mask` is optional. If it is not set, treat as `32` for IPv4 or\n"
+"        `128` for IPv6.\n"
+"\n"
+"      Example:\n"
+"        --bypass=,\n"
+"            Redirect anything.\n"
+"        --bypass=udp://127.0.0.1\n"
+"            Only ignore udp packets send to 127.0.0.1, no matter which\n"
+"            destination port is.\n"
+"        --bypass=tcp://192.168.0.1:1234\n"
+"            Only ignore tcp transmissions connect to 192.168.0.1:1234\n"
+"        --bypass=default,udp://0.0.0.0/?mask=0\n"
+"            In addition to the default rules, ignore all IPv4 UDP transmissions.\n"
+"        --bypass=default,udp://0.0.0.0/?mask=0,udp://:::53/?mask=0\n"
+"            In addition to the default rules, ignore all IPv4 UDP transmissions,\n"
+"            ignore all IPv6 UDP transmissions whose destination port is 53.\n"
+"\n"
 "  -h, --help\n"
 "      Show this help and exit.\n"
 ;
@@ -87,10 +151,8 @@ static void s_setup_cmdline_append_prog_args(const char* arg)
 
 static void s_setup_cmdline(int argc, char* argv[])
 {
-    int         i;
-    int         flag_prog_args = 0;
-    const char* opt;
-    size_t      optlen;
+    int i;
+    int flag_prog_args = 0;
 
     for (i = 1; i < argc; i++)
     {
@@ -113,27 +175,8 @@ static void s_setup_cmdline(int argc, char* argv[])
             exit(EXIT_SUCCESS);
         }
 
-        opt = "--proxy";
-        optlen = strlen(opt);
-        if (strncmp(argv[i], opt, optlen) == 0)
-        {
-            if (argv[i][optlen] == '=')
-            {
-                G->proxy_url = nt_strdup(&argv[i][optlen + 1]);
-            }
-            else if (i == argc - 1)
-            {
-                fprintf(stderr, "Missing argument for option `--proxy`.\n");
-                exit(EXIT_FAILURE);
-            }
-            else
-            {
-                i++;
-                G->proxy_url = nt_strdup(argv[i]);
-            }
-
-            continue;
-        }
+        NT_CMD_PARSE_OPTION(G->opt_proxy, "--proxy");
+        NT_CMD_PARSE_OPTION(G->opt_bypass, "--bypass");
     }
 
     if (G->prog_args == NULL)
@@ -141,10 +184,13 @@ static void s_setup_cmdline(int argc, char* argv[])
         LOG_E("Missing program path");
         exit(EXIT_FAILURE);
     }
-    if (G->proxy_url == NULL)
+    if (G->opt_proxy == NULL)
     {
-        G->proxy_url =
-            nt_strdup("socks5://" NT_DEFAULT_SOCKS5_ADDR ":" STRINGIFY(NT_DEFAULT_SOCKS5_PORT));
+        G->opt_proxy = "socks5://" NT_DEFAULT_SOCKS5_ADDR ":" STRINGIFY(NT_DEFAULT_SOCKS5_PORT);
+    }
+    if (G->opt_bypass == NULL)
+    {
+        G->opt_bypass = "default";
     }
 }
 
@@ -172,30 +218,125 @@ void nt_sock_node_release(sock_node_t* sock)
     nt_free(sock);
 }
 
+static void s_setup_ipfilter_to_rule(nt_ipfilter_item_t* dst, const url_comp_t* url)
+{
+    if (strcmp(url->scheme, "tcp") == 0)
+    {
+        dst->type = SOCK_STREAM;
+    }
+    else if (strcmp(url->scheme, "udp") == 0)
+    {
+        dst->type = SOCK_DGRAM;
+    }
+    else
+    {
+        LOG_E("Unknown type `%s`.", url->scheme);
+        exit(EXIT_FAILURE);
+    }
+
+    if ((dst->ip = url->host) == NULL)
+    {
+        LOG_E("Missing host in url.");
+        exit(EXIT_FAILURE);
+    }
+
+    if (url->port != NULL)
+    {
+        dst->port = *url->port;
+    }
+    else
+    {
+        dst->port = 0;
+    }
+
+    const char* v = nt_url_comp_query(url, "mask");
+    if (v == NULL)
+    {
+        dst->mask = strstr(dst->ip, ":") != NULL ? 128 : 32;
+    }
+    else
+    {
+        if (sscanf(v, "%u", &dst->mask) != 1)
+        {
+            LOG_E("Invalid mask.\n");
+            exit(EXIT_FAILURE);
+        }
+    }
+}
+
+static void s_setup_ipfilter_add_rule_list(const nt_ipfilter_item_t* items, size_t size)
+{
+    size_t i;
+    for (i = 0; i < size; i++)
+    {
+        const nt_ipfilter_item_t* item = &items[i];
+        int ret = nt_ipfiter_add(G->ipfilter, item->type, item->ip, item->mask, item->port);
+        if (ret != 0)
+        {
+            LOG_E("Add ipfilter failed(%d): type=%d, ip=%s, mask=%u, port=%u", ret, item->type,
+                  item->ip, item->mask, item->port);
+            exit(EXIT_FAILURE);
+        }
+    }
+}
+
+static void s_setup_ipfilter_add_rule(const char* str, size_t len)
+{
+    if (strncmp(str, "default", len) == 0)
+    {
+        s_setup_ipfilter_add_rule_list(s_ipfilter, ARRAY_SIZE(s_ipfilter));
+        return;
+    }
+
+    char*       url = nt_strndup(str, len);
+    url_comp_t* comp = NULL;
+    int         ret = nt_url_comp_parser(&comp, url);
+    nt_free(url);
+    if (ret != 0)
+    {
+        LOG_E("parse rule `%s` failed.", G->opt_bypass);
+        exit(EXIT_FAILURE);
+    }
+
+    nt_ipfilter_item_t item;
+    s_setup_ipfilter_to_rule(&item, comp);
+    nt_url_comp_free(comp);
+
+    s_setup_ipfilter_add_rule_list(&item, 1);
+}
+
+static void s_setup_ipfilter(void)
+{
+    G->ipfilter = nt_ipfilter_create();
+
+    const char* pos;
+    const char* rule = G->opt_bypass;
+    for (; (pos = strstr(rule, ",")) != NULL; rule = pos + 1)
+    {
+        size_t len = pos - rule;
+        if (len == 0)
+        {
+            continue;
+        }
+        s_setup_ipfilter_add_rule(rule, pos - rule);
+    }
+    if (*rule != '\0')
+    {
+        s_setup_ipfilter_add_rule(rule, strlen(rule));
+    }
+}
+
 void nt_runtime_init(int argc, char* argv[])
 {
-    int ret;
     G = nt_calloc(1, sizeof(*G));
     G->prog_pid = -1;
     G->prog_pipe[0] = -1;
     G->prog_pipe[1] = -1;
     ev_map_init(&G->prog_map, s_on_cmp_prog, NULL);
     s_setup_cmdline(argc, argv);
-    G->ipfilter = nt_ipfilter_create();
+    s_setup_ipfilter();
 
-    size_t i;
-    for (i = 0; i < ARRAY_SIZE(s_ipfilter); i++)
-    {
-        const nt_ipfilter_item_t* item = &s_ipfilter[i];
-        if ((ret = nt_ipfiter_add(G->ipfilter, item->type, item->ip, item->mask, item->port)) != 0)
-        {
-            LOG_E("Add ipfilter failed: type=%d, ip=%s, mask=%u, port=%u", item->type, item->ip,
-                  item->mask, item->port);
-            exit(EXIT_FAILURE);
-        }
-    }
-
-    if (nt_proxy_create(&G->proxy, G->proxy_url) != 0)
+    if (nt_proxy_create(&G->proxy, G->opt_proxy) != 0)
     {
         LOG_E("Create proxy failed.");
         exit(EXIT_FAILURE);
@@ -232,11 +373,6 @@ void nt_runtime_cleanup(void)
         nt_free(G->prog_args);
         G->prog_args = NULL;
     }
-    if (G->proxy_url != NULL)
-    {
-        nt_free(G->proxy_url);
-        G->proxy_url = NULL;
-    }
     if (G->prog_pipe[0] >= 0)
     {
         close(G->prog_pipe[0]);
@@ -259,8 +395,8 @@ void nt_runtime_cleanup(void)
 
 int nt_proxy_create(nt_proxy_t** proxy, const char* url)
 {
-    url_components_t* components = NULL;
-    int               ret = nt_url_components_parser(&components, url);
+    url_comp_t* comp = NULL;
+    int         ret = nt_url_comp_parser(&comp, url);
     if (ret != 0)
     {
         LOG_E("Parser url failed: (%d) %s.", ret, strerror(ret));
@@ -271,17 +407,17 @@ int nt_proxy_create(nt_proxy_t** proxy, const char* url)
     for (i = 0; i < ARRAY_SIZE(s_protocols); i++)
     {
         const nt_proxy_protocol_t* protocol = s_protocols[i];
-        if (strcmp(protocol->scheme, components->scheme) == 0)
+        if (strcmp(protocol->scheme, comp->scheme) == 0)
         {
-            ret = protocol->make(proxy, components);
+            ret = protocol->make(proxy, comp);
             goto finish;
         }
     }
 
-    LOG_E("Unknown protocol `%s`.", components->scheme);
+    LOG_E("Unknown protocol `%s`.", comp->scheme);
     ret = NT_ERR(ENOTSUP);
 
 finish:
-    nt_url_components_free(components);
+    nt_url_comp_free(comp);
     return ret;
 }

@@ -55,7 +55,7 @@ typedef struct nt_proxy_protocol
      * @param[in] url URL.
      * @return 0 if success, errno if failed.
      */
-    int (*make)(nt_proxy_t** proxy, const url_components_t* url);
+    int (*make)(nt_proxy_t** proxy, const url_comp_t* url);
 } nt_proxy_protocol_t;
 
 typedef struct sock_node
@@ -82,8 +82,10 @@ typedef struct prog_node
 
 typedef struct runtime
 {
-    char*          proxy_url; /* Socks5 address. */
-    nt_proxy_t*    proxy;     /* Proxy object. */
+    const char* opt_proxy;  /* --proxy */
+    const char* opt_bypass; /* --bypass */
+
+    nt_proxy_t*    proxy; /* Proxy object. */
     nt_ipfilter_t* ipfilter;
 
     char**   prog_args;        /* Arguments for child program, ending with NULL. */

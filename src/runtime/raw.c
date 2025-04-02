@@ -683,7 +683,7 @@ static void s_proxy_raw_channel_release(struct nt_proxy* thiz, int channel)
     s_proxy_raw_weakup(raw);
 }
 
-static int s_proxy_raw_make(nt_proxy_t** proxy, const url_components_t* url)
+static int s_proxy_raw_make(nt_proxy_t** proxy, const url_comp_t* url)
 {
     (void)url;
 

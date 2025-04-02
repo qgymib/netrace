@@ -1,86 +1,279 @@
+#define _GNU_SOURCE
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
 #include "utils/defs.h"
 #include "utils/memory.h"
+#include "utils/log.h"
+#include "utils/str.h"
 #include "urlparser.h"
 
-int nt_url_components_parser(url_components_t** components, const char* url)
+static int s_url_parse_scheme(url_comp_t* comp, const char** url)
 {
-    int               ret = 0;
-    url_components_t* comp = nt_calloc(1, sizeof(url_components_t));
-    const char*       scheme_eol = strstr(url, "://");
+    const char* scheme_eol = strstr(*url, "://");
     if (scheme_eol == NULL)
     {
-        ret = NT_ERR(EINVAL);
-        goto ERR;
+        return NT_ERR(EINVAL);
     }
-    comp->scheme = nt_strndup(url, scheme_eol - url);
-    url = scheme_eol + 3;
 
-    const char* userpass_eol = strstr(url, "@");
+    comp->scheme = nt_strndup(*url, scheme_eol - *url);
+    *url = scheme_eol + 3;
+    return 0;
+}
+
+static int s_url_parse_authority(url_comp_t* comp, const char** url)
+{
+    if (**url == '\0')
+    {
+        return 0;
+    }
+
+    /* Find where authority ends. */
+    const char* authority_eol = strstr(*url, "/");
+    size_t      url_len = (authority_eol != NULL) ? (size_t)(authority_eol - *url) : strlen(*url);
+
+    /* Parser username and password. */
+    const char* userpass_eol = memmem(*url, url_len, "@", 1);
     if (userpass_eol != NULL)
     {
-        comp->username = nt_strndup(url, userpass_eol - url);
-        char* user_eol = strstr(comp->username, ":");
+        size_t      userpass_len = userpass_eol - *url;
+        const char* user_eol = memmem(*url, userpass_len, ":", 1);
         if (user_eol != NULL)
         {
-            comp->password = nt_strdup(user_eol + 1);
-            *user_eol = '\0';
+            comp->username = nt_strndup(*url, user_eol - *url);
+            comp->password = nt_strndup(user_eol + 1, userpass_eol - user_eol - 1);
         }
-        url = userpass_eol + 1;
+        else
+        {
+            comp->username = nt_strndup(*url, userpass_len);
+        }
+
+        url_len -= userpass_eol - *url + 1;
+        *url = userpass_eol + 1;
     }
 
-    const char* host_eol = strstr(url, ":");
-    if (host_eol != NULL)
+    /* Parser address and port. */
+    const char* addr_eol = nt_strnrstr(*url, url_len, ":");
+    if (addr_eol != NULL)
     {
-        comp->host = nt_strndup(url, host_eol - url);
-        comp->port = nt_malloc(sizeof(*comp->port));
-        if (sscanf(host_eol + 1, "%u", comp->port) != 1)
-        {
-            ret = NT_ERR(EINVAL);
-            goto ERR;
+        if (addr_eol == *url)
+        { /* Single `:` should not occur at start of address. */
+            *url = addr_eol;
+            return NT_ERR(EINVAL);
+        }
+        if (addr_eol[-1] == ':')
+        { /* This is IPv6 address. */
+            comp->host = nt_strndup(*url, url_len);
+        }
+        else
+        { /* This is IPv4 address. */
+            comp->host = nt_strndup(*url, addr_eol - *url);
+            comp->port = nt_malloc(sizeof(*comp->port));
+            char* s_port = nt_strndup(addr_eol + 1, url_len - (addr_eol - *url) - 1);
+            int   scan_ret = sscanf(s_port, "%u", comp->port);
+            nt_free(s_port);
+            if (scan_ret != 1)
+            {
+                *url = addr_eol + 1;
+                return NT_ERR(EINVAL);
+            }
         }
     }
-    else if (url[0] != '\0')
+    else
     {
-        comp->host = nt_strdup(url);
+        comp->host = nt_strndup(*url, url_len);
+    }
+
+    *url += (authority_eol != NULL) ? (url_len + 1) : url_len;
+    return 0;
+}
+
+static int s_url_parse_path(url_comp_t* comp, const char** url)
+{
+    if (**url == '\0')
+    {
+        return 0;
+    }
+
+    const char* pos = strpbrk(*url, "#?");
+    if (pos == NULL)
+    {
+        comp->path = nt_strdup(*url);
+        *url += strlen(*url);
+        return 0;
+    }
+
+    if (pos == *url)
+    {
+        return 0;
+    }
+
+    size_t path_len = pos - *url;
+    comp->path = nt_strndup(*url, path_len);
+    *url += path_len;
+
+    return 0;
+}
+
+static void s_url_parse_query_value(url_query_t* q)
+{
+    char* pos = strstr(q->k, "=");
+    if (pos != NULL)
+    {
+        q->v = pos + 1;
+        *pos = '\0';
+    }
+}
+
+static void s_url_append_query(url_comp_t* comp, const char* data, size_t size)
+{
+    comp->query_sz++;
+    comp->query = nt_realloc(comp->query, sizeof(*comp->query) * comp->query_sz);
+    url_query_t* q = &comp->query[comp->query_sz - 1];
+    q->k = nt_strndup(data, size);
+    q->v = NULL;
+    s_url_parse_query_value(q);
+}
+
+static int s_url_parse_query(url_comp_t* comp, const char** url)
+{
+    if (**url == '\0' || **url == '#')
+    {
+        return 0;
+    }
+    if (**url != '?')
+    {
+        return NT_ERR(EINVAL);
+    }
+    *url += 1;
+
+    const char* pos;
+    while ((pos = strpbrk(*url, "#&")) != NULL)
+    {
+        if (*pos == '#')
+        {
+            break;
+        }
+        if (pos == *url)
+        {
+            *url += 1;
+            continue;
+        }
+
+        s_url_append_query(comp, *url, pos - *url);
+        *url = pos + 1;
+    }
+
+    if (pos == NULL)
+    {
+        if (**url != '\0')
+        {
+            size_t url_len = strlen(*url);
+            s_url_append_query(comp, *url, url_len);
+            *url += url_len;
+        }
+        return 0;
+    }
+
+    if (**url == '#')
+    {
+        return 0;
+    }
+
+    s_url_append_query(comp, *url, pos - *url);
+    *url = pos;
+    return 0;
+
+    return 0;
+}
+
+int nt_url_comp_parser(url_comp_t** components, const char* url)
+{
+    int               ret = 0;
+    const char*       dup_url = url;
+    url_comp_t* comp = nt_calloc(1, sizeof(url_comp_t));
+    if ((ret = s_url_parse_scheme(comp, &url)) != 0)
+    {
+        goto ERR;
+    }
+    if ((ret = s_url_parse_authority(comp, &url)) != 0)
+    {
+        goto ERR;
+    }
+    if ((ret = s_url_parse_path(comp, &url)) != 0)
+    {
+        goto ERR;
+    }
+    if ((ret = s_url_parse_query(comp, &url)) != 0)
+    {
+        goto ERR;
     }
 
     *components = comp;
     return 0;
 
 ERR:
-    nt_url_components_free(comp);
+    LOG_E("URL `%s` parser error at %d.", dup_url, url - dup_url);
+    nt_url_comp_free(comp);
     return ret;
 }
 
-void nt_url_components_free(url_components_t* components)
+void nt_url_comp_free(url_comp_t* comp)
 {
-    if (components->scheme != NULL)
+    if (comp->scheme != NULL)
     {
-        nt_free(components->scheme);
-        components->scheme = NULL;
+        nt_free(comp->scheme);
+        comp->scheme = NULL;
     }
-    if (components->username != NULL)
+    if (comp->username != NULL)
     {
-        nt_free(components->username);
-        components->username = NULL;
+        nt_free(comp->username);
+        comp->username = NULL;
     }
-    if (components->password != NULL)
+    if (comp->password != NULL)
     {
-        nt_free(components->password);
-        components->password = NULL;
+        nt_free(comp->password);
+        comp->password = NULL;
     }
-    if (components->host != NULL)
+    if (comp->host != NULL)
     {
-        nt_free(components->host);
-        components->host = NULL;
+        nt_free(comp->host);
+        comp->host = NULL;
     }
-    if (components->port != NULL)
+    if (comp->port != NULL)
     {
-        nt_free(components->port);
-        components->port = NULL;
+        nt_free(comp->port);
+        comp->port = NULL;
     }
-    nt_free(components);
+    if (comp->path != NULL)
+    {
+        nt_free(comp->path);
+        comp->path = NULL;
+    }
+    if (comp->query != NULL)
+    {
+        size_t i;
+        for (i = 0; i < comp->query_sz; i++)
+        {
+            nt_free(comp->query[i].k);
+            /* No need to free v, it just point to subrange of k. */
+        }
+        nt_free(comp->query);
+    }
+    nt_free(comp);
+}
+
+const char* nt_url_comp_query(const url_comp_t* comp, const char* k)
+{
+    size_t i;
+    for (i = 0; i < comp->query_sz; i++)
+    {
+        const url_query_t* q = &comp->query[i];
+        if (strcmp(q->k, k) == 0)
+        {
+            return q->v;
+        }
+    }
+
+    return NULL;
 }

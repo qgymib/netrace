@@ -73,7 +73,6 @@ static void s_trace_setup(prog_node_t* info)
     NT_ASSERT(ptrace(PTRACE_SETOPTIONS, info->pid, 0, trace_option), ==, 0,
         "(%d) %s", errno, strerror(errno));
     /* clang-format on */
-    LOG_D("pid=%d setup ptrace.", info->pid);
 }
 
 static prog_node_t* s_find_proc(pid_t pid)
@@ -145,8 +144,6 @@ static void s_trace_syscall_socket_leave(prog_node_t* prog)
     NT_ASSERT(ev_map_insert(&prog->sock_map, &sock->node), ==, NULL,
         "Conflict node: pid=%d, fd=%d.", prog->pid, sock->fd);
     /* clang-format on */
-    LOG_D("pid=%d socket=%d domain=%d type=%d protocol=%d.", prog->pid, sock->fd, sock->domain,
-          sock->type, sock->protocol);
 }
 
 static void s_trace_syscall_close_enter(prog_node_t* prog)
@@ -160,7 +157,6 @@ static void s_trace_syscall_close_enter(prog_node_t* prog)
     }
 
     sock_node_t* sock = container_of(it, sock_node_t, node);
-    LOG_D("pid=%d close socket=%d", prog->pid, sock->fd);
     ev_map_erase(&prog->sock_map, &sock->node);
     nt_sock_node_release(sock);
 }
