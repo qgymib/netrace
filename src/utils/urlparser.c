@@ -189,8 +189,8 @@ static int s_url_parse_query(url_comp_t* comp, const char** url)
 
 int nt_url_comp_parser(url_comp_t** components, const char* url)
 {
-    int               ret = 0;
-    const char*       dup_url = url;
+    int         ret = 0;
+    const char* dup_url = url;
     url_comp_t* comp = nt_calloc(1, sizeof(url_comp_t));
     if ((ret = s_url_parse_scheme(comp, &url)) != 0)
     {
@@ -276,4 +276,10 @@ const char* nt_url_comp_query(const url_comp_t* comp, const char* k)
     }
 
     return NULL;
+}
+
+const char* nt_url_comp_query_default(const url_comp_t* comp, const char* k, const char* v)
+{
+    const char* s = nt_url_comp_query(comp, k);
+    return s != NULL ? s : v;
 }

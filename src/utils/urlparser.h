@@ -46,6 +46,15 @@ void nt_url_comp_free(url_comp_t* comp);
  */
 const char* nt_url_comp_query(const url_comp_t* comp, const char* k);
 
+/**
+ * @brief Query value, if \p k not exist, return \p v.
+ * @param[in] comp URL components.
+ * @param[in] k The key.
+ * @param[in] v The default value.
+ * @return The value.
+ */
+const char* nt_url_comp_query_default(const url_comp_t* comp, const char* k, const char* v);
+
 #ifdef __cplusplus
 }
 #endif
