@@ -103,7 +103,7 @@ static int s_dns_parse_question(nt_dns_msg_t* pkg, const uint8_t* data, size_t s
         nt_dns_question_t* q = &pkg->questions[i];
         while (1)
         {
-            if (offset >= size)
+            if (offset > size)
             {
                 return NT_ERR(EINVAL);
             }
@@ -121,7 +121,7 @@ static int s_dns_parse_question(nt_dns_msg_t* pkg, const uint8_t* data, size_t s
                 {
                     return ref;
                 }
-                else if ((size_t)ref >= size)
+                else if ((size_t)ref > size)
                 {
                     return NT_ERR(EINVAL);
                 }
@@ -131,7 +131,7 @@ static int s_dns_parse_question(nt_dns_msg_t* pkg, const uint8_t* data, size_t s
             }
             else
             {
-                if (offset + name_sz >= size)
+                if (offset + name_sz > size)
                 {
                     return NT_ERR(EINVAL);
                 }
@@ -146,7 +146,7 @@ static int s_dns_parse_question(nt_dns_msg_t* pkg, const uint8_t* data, size_t s
             q->qnames[q->nqname - 1][name_sz] = '\0';
         }
 
-        if (offset + 4 >= size)
+        if (offset + 4 > size)
         {
             return NT_ERR(EINVAL);
         }
@@ -187,7 +187,7 @@ static int s_dns_parse_resource(nt_dns_resource_t** dst, size_t n, const uint8_t
             }
 
             name_sz = data[ref];
-            if ((size_t)ref + 1 + name_sz >= size)
+            if ((size_t)ref + 1 + name_sz > size)
             {
                 return NT_ERR(EINVAL);
             }
@@ -198,7 +198,7 @@ static int s_dns_parse_resource(nt_dns_resource_t** dst, size_t n, const uint8_t
         }
         else
         {
-            if (offset + name_sz >= size)
+            if (offset + name_sz > size)
             {
                 return NT_ERR(EINVAL);
             }
@@ -208,7 +208,7 @@ static int s_dns_parse_resource(nt_dns_resource_t** dst, size_t n, const uint8_t
             offset += name_sz;
         }
 
-        if (offset + 10 >= size)
+        if (offset + 10 > size)
         {
             return NT_ERR(EINVAL);
         }
@@ -225,7 +225,7 @@ static int s_dns_parse_resource(nt_dns_resource_t** dst, size_t n, const uint8_t
         r->rdlength = s_dns_get_u16(&data[offset]);
         offset += 2;
 
-        if (offset + r->rdlength >= size)
+        if (offset + r->rdlength > size)
         {
             return NT_ERR(EINVAL);
         }

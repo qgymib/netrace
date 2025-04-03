@@ -1,6 +1,7 @@
 
 add_executable(${PROJECT_NAME}_test
     "cases/connect.c"
+    "cases/dns.c"
     "cases/exitcode.c"
     "cases/grandchild.c"
     "cases/urlparser.c"
