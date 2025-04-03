@@ -1,4 +1,5 @@
 #include <string.h>
+#include "utils/memory.h"
 #include "str.h"
 
 const char* nt_strrstr(const char* haystack, const char* needle)
@@ -58,4 +59,23 @@ const char* nt_strnrstr(const char* haystack, size_t len, const char* needle)
     }
 
     return result;
+}
+
+void nt_str_arr_append(nt_str_arr_t* arr, const char* str, size_t len)
+{
+    arr->size++;
+    arr->data = nt_realloc(arr->data, sizeof(char*) * arr->size);
+    arr->data[arr->size - 1] = nt_strndup(str, len);
+}
+
+void nt_str_arr_free(nt_str_arr_t* arr)
+{
+    size_t i;
+    for (i = 0; i < arr->size; i++)
+    {
+        nt_free(arr->data[i]);
+    }
+    nt_free(arr->data);
+    arr->data = NULL;
+    arr->size = 0;
 }

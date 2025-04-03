@@ -17,15 +17,11 @@
 
 static void s_dns_msg_free_question(nt_dns_msg_t* msg)
 {
-    size_t i, j;
+    size_t i;
     for (i = 0; i < msg->header.qdcount; i++)
     {
         nt_dns_question_t* q = &msg->questions[i];
-        for (j = 0; j < q->nqname; j++)
-        {
-            nt_free(q->qnames[j]);
-        }
-        nt_free(q->qnames);
+        nt_str_arr_free(&q->qname);
     }
     nt_free(msg->questions);
 }
@@ -36,7 +32,7 @@ static void s_dns_msg_free_resource(nt_dns_resource_t* resource, size_t n)
     for (i = 0; i < n; i++)
     {
         nt_dns_resource_t* r = &resource[i];
-        nt_free(r->name);
+        nt_str_arr_free(&r->name);
         nt_free(r->rdata);
     }
     nt_free(resource);
@@ -71,25 +67,72 @@ static uint16_t s_dns_get_offset(uint8_t h, uint8_t l)
  */
 static ssize_t s_dns_trace_pointer(const uint8_t* data, size_t size, size_t pos)
 {
-    uint8_t high = data[pos];
-    if (!s_dns_is_pointer(high))
+    size_t cnt;
+    for (cnt = 0; cnt < 64; cnt++)
     {
-        return pos;
+        uint8_t high = data[pos];
+        if (!s_dns_is_pointer(high))
+        {
+            return pos;
+        }
+
+        if (pos + 1 >= size)
+        {
+            return NT_ERR(EINVAL);
+        }
+
+        uint8_t low = data[pos + 1];
+        pos = s_dns_get_offset(high, low);
+        if (pos >= size)
+        {
+            return NT_ERR(EINVAL);
+        }
     }
 
-    if (pos + 1 >= size)
+    return NT_ERR(ELOOP);
+}
+
+static ssize_t s_dns_parse_labels(nt_str_arr_t* labels, const uint8_t* data, size_t size,
+                                  size_t pos)
+{
+    ssize_t ref, ret = 0;
+    size_t  offset = pos;
+    int     jump = 0;
+    while (1)
     {
-        return NT_ERR(EINVAL);
+        if ((ref = s_dns_trace_pointer(data, size, offset)) < 0)
+        {
+            return ref;
+        }
+        else if ((size_t)ref != offset)
+        {
+            jump = 1;
+            ret = 2;
+        }
+
+        uint8_t len = data[ref++];
+        if (len == 0)
+        {
+            if (!jump)
+            {
+                ret = ref - pos;
+            }
+            break;
+        }
+        else if ((size_t)ref + len > size)
+        {
+            return NT_ERR(EINVAL);
+        }
+        nt_str_arr_append(labels, (char*)&data[ref], len);
+
+        offset = ref + len;
+        if (!jump)
+        {
+            ret = offset - pos;
+        }
     }
 
-    uint8_t low = data[pos + 1];
-    pos = s_dns_get_offset(high, low);
-    if (pos >= size)
-    {
-        return NT_ERR(EINVAL);
-    }
-
-    return s_dns_trace_pointer(data, size, pos);
+    return ret;
 }
 
 static int s_dns_parse_question(nt_dns_msg_t* pkg, const uint8_t* data, size_t size, size_t pos)
@@ -101,50 +144,12 @@ static int s_dns_parse_question(nt_dns_msg_t* pkg, const uint8_t* data, size_t s
     for (i = 0; i < pkg->header.qdcount; i++)
     {
         nt_dns_question_t* q = &pkg->questions[i];
-        while (1)
+        ssize_t            ref = s_dns_parse_labels(&q->qname, data, size, offset);
+        if (ref < 0)
         {
-            if (offset > size)
-            {
-                return NT_ERR(EINVAL);
-            }
-            uint8_t name_sz = data[offset++];
-            if (name_sz == 0)
-            {
-                break;
-            }
-
-            const uint8_t* name_start = NULL;
-            if (s_dns_is_pointer(name_sz))
-            {
-                ssize_t ref = s_dns_trace_pointer(data, size, offset - 1);
-                if (ref < 0)
-                {
-                    return ref;
-                }
-                else if ((size_t)ref > size)
-                {
-                    return NT_ERR(EINVAL);
-                }
-                name_sz = data[ref];
-                name_start = &data[ref + 1];
-                offset += 2;
-            }
-            else
-            {
-                if (offset + name_sz > size)
-                {
-                    return NT_ERR(EINVAL);
-                }
-                name_start = &data[offset];
-                offset += name_sz;
-            }
-
-            q->nqname++;
-            q->qnames = nt_realloc(q->qnames, sizeof(char*) * q->nqname);
-            q->qnames[q->nqname - 1] = nt_malloc(name_sz + 1);
-            memcpy(q->qnames[q->nqname - 1], name_start, name_sz);
-            q->qnames[q->nqname - 1][name_sz] = '\0';
+            return ref;
         }
+        offset += ref;
 
         if (offset + 4 > size)
         {
@@ -172,41 +177,17 @@ static int s_dns_parse_resource(nt_dns_resource_t** dst, size_t n, const uint8_t
     for (i = 0; i < n; i++)
     {
         nt_dns_resource_t* r = *dst + i;
-        if (offset + 1 >= size)
+        if (offset + 1 > size)
         {
             return NT_ERR(EINVAL);
         }
 
-        uint8_t name_sz = data[offset++];
-        if (s_dns_is_pointer(name_sz))
+        ssize_t ref = s_dns_parse_labels(&r->name, data, size, offset);
+        if (ref < 0)
         {
-            ssize_t ref = s_dns_trace_pointer(data, size, offset - 1);
-            if (ref < 0)
-            {
-                return ref;
-            }
-
-            name_sz = data[ref];
-            if ((size_t)ref + 1 + name_sz > size)
-            {
-                return NT_ERR(EINVAL);
-            }
-            r->name = nt_malloc(name_sz + 1);
-            memcpy(r->name, &data[ref + 1], name_sz);
-            r->name[name_sz] = '\0';
-            offset += 2;
+            return ref;
         }
-        else
-        {
-            if (offset + name_sz > size)
-            {
-                return NT_ERR(EINVAL);
-            }
-            r->name = nt_malloc(name_sz + 1);
-            memcpy(r->name, data + offset, name_sz);
-            r->name[name_sz] = '\0';
-            offset += name_sz;
-        }
+        offset += ref;
 
         if (offset + 10 > size)
         {
@@ -235,7 +216,7 @@ static int s_dns_parse_resource(nt_dns_resource_t** dst, size_t n, const uint8_t
         offset += r->rdlength;
     }
 
-    return 0;
+    return offset - pos;
 }
 
 int nt_dns_msg_parser(nt_dns_msg_t** msg, const void* data, size_t size)
