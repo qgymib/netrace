@@ -26,6 +26,7 @@ endfunction()
 
 add_library(lib${PROJECT_NAME} STATIC
     "src/runtime/__init__.c"
+    "src/runtime/dns.c"
     "src/runtime/raw.c"
     "src/runtime/socks5.c"
     "src/utils/dns.c"

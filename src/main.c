@@ -5,12 +5,10 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <assert.h>
 #include <sys/ptrace.h>
 #include <sys/wait.h>
 #include <sys/syscall.h>
 #include <netinet/in.h>
-#include <arpa/inet.h>
 #include "runtime/__init__.h"
 #include "utils/defs.h"
 #include "utils/log.h"
