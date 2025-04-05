@@ -1114,32 +1114,14 @@ static int s_socks5_channel_tcp_make(nt_proxy_socks5_t* socks5, socks5_channel_t
     int ret;
     ch->u.tcp.islisten = 1;
 
-    int family = ch->peeraddr.ss_family;
-    if ((ch->inbound.event.data.fd = socket(family, SOCK_STREAM, 0)) < 0)
-    {
-        return NT_ERR(errno);
-    }
-    nt_nonblock(ch->inbound.event.data.fd, 1);
+    int         family = ch->peeraddr.ss_family;
+    const char* ip = (family == AF_INET) ? "127.0.0.1" : "::1";
 
-    const char*      ip = (family == AF_INET) ? "127.0.0.1" : "::1";
-    struct sockaddr* addr = (struct sockaddr*)&ch->proxyaddr;
-    socklen_t        addrlen = sizeof(ch->proxyaddr);
-    nt_ip_addr(ip, 0, addr);
-    if (bind(ch->inbound.event.data.fd, addr, addrlen) < 0)
+    if ((ret = nt_socket_listen(ip, 0, 1, &ch->proxyaddr)) < 0)
     {
-        ret = NT_ERR(errno);
-        goto ERR_BIND;
+        return ret;
     }
-    if (getsockname(ch->inbound.event.data.fd, addr, &addrlen) < 0)
-    {
-        ret = NT_ERR(errno);
-        goto ERR_BIND;
-    }
-    if (listen(ch->inbound.event.data.fd, 1) < 0)
-    {
-        ret = NT_ERR(errno);
-        goto ERR_BIND;
-    }
+    ch->inbound.event.data.fd = ret;
 
     if ((ch->outbound.event.data.fd = socket(socks5->server_addr.ss_family, SOCK_STREAM, 0)) < 0)
     {
@@ -1148,8 +1130,8 @@ static int s_socks5_channel_tcp_make(nt_proxy_socks5_t* socks5, socks5_channel_t
     }
     nt_nonblock(ch->outbound.event.data.fd, 1);
 
-    addr = (struct sockaddr*)&socks5->server_addr;
-    addrlen = sizeof(socks5->server_addr);
+    struct sockaddr* addr = (struct sockaddr*)&socks5->server_addr;
+    socklen_t        addrlen = sizeof(socks5->server_addr);
     if (connect(ch->outbound.event.data.fd, addr, addrlen) < 0)
     {
         ret = errno;
@@ -1180,28 +1162,13 @@ static int s_socks5_channel_udp_make(nt_proxy_socks5_t* socks5, socks5_channel_t
     int ret;
     ch->u.udp.associate_fd = -1;
 
-    int family = ch->peeraddr.ss_family;
-    if ((ch->inbound.event.data.fd = socket(family, SOCK_DGRAM, 0)) < 0)
+    int         family = ch->peeraddr.ss_family;
+    const char* ip = (family == AF_INET) ? "127.0.0.1" : "::1";
+    if ((ret = nt_socket_bind(SOCK_DGRAM, ip, 0, 1, &ch->proxyaddr)) < 0)
     {
-        return NT_ERR(errno);
+        return ret;
     }
-    nt_nonblock(ch->inbound.event.data.fd, 1);
-
-    const char*      ip = (family == AF_INET) ? "127.0.0.1" : "::1";
-    struct sockaddr* addr = (struct sockaddr*)&ch->proxyaddr;
-    socklen_t        addrlen = sizeof(ch->proxyaddr);
-    nt_ip_addr(ip, 0, addr);
-
-    if (bind(ch->inbound.event.data.fd, addr, addrlen) != 0)
-    {
-        ret = NT_ERR(errno);
-        goto ERR_INBOUND_BIND;
-    }
-    if (getsockname(ch->inbound.event.data.fd, addr, &addrlen) != 0)
-    {
-        ret = NT_ERR(errno);
-        goto ERR_INBOUND_BIND;
-    }
+    ch->inbound.event.data.fd = ret;
 
     family = socks5->server_addr.ss_family;
     if ((ch->outbound.event.data.fd = socket(family, SOCK_STREAM, 0)) < 0)
@@ -1211,8 +1178,8 @@ static int s_socks5_channel_udp_make(nt_proxy_socks5_t* socks5, socks5_channel_t
     }
     nt_nonblock(ch->inbound.event.data.fd, 1);
 
-    addr = (struct sockaddr*)&socks5->server_addr;
-    addrlen = sizeof(socks5->server_addr);
+    struct sockaddr* addr = (struct sockaddr*)&socks5->server_addr;
+    socklen_t        addrlen = sizeof(socks5->server_addr);
     if (connect(ch->outbound.event.data.fd, addr, addrlen) < 0)
     {
         ret = errno;

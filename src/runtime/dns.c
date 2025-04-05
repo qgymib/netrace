@@ -59,27 +59,11 @@ int nt_dns_proxy_create(nt_dns_proxy_t** proxy, const nt_dns_proxy_config_t* con
     int             ret;
     nt_dns_proxy_t* p = nt_malloc(sizeof(nt_dns_proxy_t));
 
-    struct sockaddr* addr = (struct sockaddr*)&p->local_addr;
-    socklen_t        addr_len = sizeof(p->local_addr);
-    if ((ret = nt_ip_addr(config->ip, config->port, addr)) < 0)
+    if ((ret = nt_socket_bind(SOCK_DGRAM, config->ip, config->port, 1, &p->local_addr)) < 0)
     {
-        goto ERR;
+        nt_free(p);
+        return ret;
     }
-    if ((p->server_fd = socket(p->local_addr.ss_family, SOCK_DGRAM, 0)) < 0)
-    {
-        goto ERR;
-    }
-    if ((ret = bind(p->server_fd, addr, addr_len)) != 0)
-    {
-        ret = NT_ERR(errno);
-        goto ERR_BIND;
-    }
-    if ((ret = getsockname(p->server_fd, addr, &addr_len)) < 0)
-    {
-        ret = NT_ERR(errno);
-        goto ERR_BIND;
-    }
-    nt_nonblock(p->server_fd, 1);
 
     p->looping = 1;
     if ((ret = pthread_create(&p->tid, NULL, s_dns_proxy_thread, p)) != 0)
@@ -92,7 +76,6 @@ int nt_dns_proxy_create(nt_dns_proxy_t** proxy, const nt_dns_proxy_config_t* con
 
 ERR_BIND:
     close(p->server_fd);
-ERR:
     nt_free(p);
     return ret;
 }

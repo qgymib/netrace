@@ -58,6 +58,27 @@ void nt_sockaddr_copy(struct sockaddr* dst, const struct sockaddr* src);
  */
 const char* nt_socktype_name(int type);
 
+/**
+ * @brief Create a socket, bind to address, and get bind address.
+ * @param[in] type      SOCK_STREAM or SOCK_DGRAM
+ * @param[in] ip        Local IP
+ * @param[in] port      Local Port.
+ * @param[in] nonblock  Set non-block mode.
+ * @param[out] addr     Bind address.
+ * @return              Socket handle.
+ */
+int nt_socket_bind(int type, const char* ip, int port, int nonblock, struct sockaddr_storage* addr);
+
+/**
+ * @brief Create a TCP socket, and start listen.
+ * @param[in] ip        Local IP.
+ * @param[in] port      Local port.
+ * @param[in] nonblock  Set non-block mode.
+ * @param[out] addr     Bind address.
+ * @return              Socket handle.
+ */
+int nt_socket_listen(const char* ip, int port, int nonblock, struct sockaddr_storage* addr);
+
 #ifdef __cplusplus
 }
 #endif

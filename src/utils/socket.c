@@ -164,3 +164,64 @@ const char* nt_socktype_name(int type)
 
     return "unknown";
 }
+
+int nt_socket_bind(int type, const char* ip, int port, int nonblock, struct sockaddr_storage* addr)
+{
+    int                     fd, ret;
+    struct sockaddr_storage tmp_addr;
+    if (addr == NULL)
+    {
+        addr = &tmp_addr;
+    }
+
+    if ((ret = nt_ip_addr(ip, port, (struct sockaddr*)addr)) < 0)
+    {
+        return ret;
+    }
+
+    if ((fd = socket(addr->ss_family, type, 0)) < 0)
+    {
+        return NT_ERR(errno);
+    }
+
+    socklen_t addr_len = sizeof(*addr);
+    if (bind(fd, (struct sockaddr*)addr, addr_len) != 0)
+    {
+        ret = NT_ERR(errno);
+        goto ERR;
+    }
+    if (getsockname(fd, (struct sockaddr*)addr, &addr_len) < 0)
+    {
+        ret = NT_ERR(errno);
+        goto ERR;
+    }
+    if ((ret = nt_nonblock(fd, nonblock)) < 0)
+    {
+        goto ERR;
+    }
+
+    return fd;
+
+ERR:
+    close(fd);
+    return ret;
+}
+
+int nt_socket_listen(const char* ip, int port, int nonblock, struct sockaddr_storage* addr)
+{
+    int fd = nt_socket_bind(SOCK_STREAM, ip, port, nonblock, addr);
+    if (fd < 0)
+    {
+        return fd;
+    }
+
+    int ret = listen(fd, SOMAXCONN);
+    if (ret < 0)
+    {
+        ret = NT_ERR(errno);
+        close(fd);
+        return ret;
+    }
+
+    return fd;
+}
