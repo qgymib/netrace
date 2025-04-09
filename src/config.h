@@ -22,4 +22,11 @@
 #define NT_SOCKET_BUFFER_SIZE (4 * 1024)
 #endif
 
+/**
+ * @brief Default DNS query timeout in seconds.
+ */
+#ifndef NT_DNS_QUERY_TIMEOUT
+#define NT_DNS_QUERY_TIMEOUT 60
+#endif
+
 #endif

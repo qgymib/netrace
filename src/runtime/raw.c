@@ -182,57 +182,24 @@ static void s_proxy_raw_weakup(nt_proxy_raw_t* raw)
 
 static int s_proxy_new_channel_tcp(proxy_raw_channel_t* ch)
 {
-    int ret = 0;
+    int         ret = 0;
+    const char* ip = ch->peeraddr.ss_family == AF_INET ? "127.0.0.1" : "::1";
 
     ch->islisten = 1;
-    if ((ch->inbound.event.data.fd = socket(ch->peeraddr.ss_family, SOCK_STREAM, 0)) < 0)
+    if ((ret = nt_socket_listen(ip, 0, 1, &ch->localaddr)) < 0)
     {
-        return NT_ERR(errno);
+        return ret;
     }
-    nt_nonblock(ch->inbound.event.data.fd, 1);
+    ch->inbound.event.data.fd = ret;
 
-    const char* ip = ch->peeraddr.ss_family == AF_INET ? "127.0.0.1" : "::1";
-    socklen_t   localaddrlen = sizeof(ch->localaddr);
-    nt_ip_addr(ip, 0, (struct sockaddr*)&ch->localaddr);
-    if (bind(ch->inbound.event.data.fd, (struct sockaddr*)&ch->localaddr, localaddrlen) < 0)
+    if ((ret = nt_socket_connect(SOCK_STREAM, &ch->peeraddr, 1)) < 0)
     {
-        ret = NT_ERR(errno);
         goto ERR_BIND;
     }
-    if (getsockname(ch->inbound.event.data.fd, (struct sockaddr*)&ch->localaddr, &localaddrlen) < 0)
-    {
-        ret = NT_ERR(errno);
-        goto ERR_BIND;
-    }
-
-    if (listen(ch->inbound.event.data.fd, 1) < 0)
-    {
-        ret = NT_ERR(errno);
-        goto ERR_BIND;
-    }
-
-    if ((ch->outbound.event.data.fd = socket(ch->peeraddr.ss_family, SOCK_STREAM, 0)) < 0)
-    {
-        ret = NT_ERR(errno);
-        goto ERR_BIND;
-    }
-    nt_nonblock(ch->outbound.event.data.fd, 1);
-
-    if (connect(ch->outbound.event.data.fd, (struct sockaddr*)&ch->peeraddr, sizeof(ch->peeraddr)) <
-        0)
-    {
-        ret = errno;
-        if (ret != EAGAIN && ret != EINPROGRESS)
-        {
-            ret = NT_ERR(ret);
-            goto ERR_CONNECT;
-        }
-    }
+    ch->outbound.event.data.fd = ret;
 
     return 0;
 
-ERR_CONNECT:
-    close(ch->outbound.event.data.fd);
 ERR_BIND:
     close(ch->inbound.event.data.fd);
     return ret;
@@ -400,7 +367,7 @@ static void s_proxy_raw_handle_inbound_w(nt_proxy_raw_t* raw, proxy_raw_channel_
 static void s_proxy_raw_handle_inbound_tcp_listen(nt_proxy_raw_t* raw, proxy_raw_channel_t* ch)
 {
     /* Accept connection and close listen fd. */
-    int fd = accept(ch->inbound.event.data.fd, NULL, NULL);
+    int fd = nt_accept(ch->inbound.event.data.fd);
     if (fd < 0)
     {
         s_proxy_raw_close_inbound_outbound_channel(raw, ch);
@@ -638,7 +605,7 @@ static void* s_proxy_raw_loop(void* arg)
         }
         else if (ret < 0)
         {
-            NT_ASSERT(errno, ==, EINTR, "epoll_wait() failed: (%d) %s.", errno, strerror(errno));
+            NT_ASSERT(errno == EINTR, "epoll_wait() failed: (%d) %s.", errno, strerror(errno));
             continue;
         }
 
@@ -697,12 +664,12 @@ static int s_proxy_raw_make(nt_proxy_t** proxy, const url_comp_t* url)
     ev_list_init(&raw->actq);
     pthread_mutex_init(&raw->actq_mutex, NULL);
 
-    if ((raw->epollfd = epoll_create(1024)) < 0)
+    if ((raw->epollfd = epoll_create1(EPOLL_CLOEXEC)) < 0)
     {
         retval = errno;
         goto ERR_EPOLL_CREATE;
     }
-    if ((raw->eventfd = eventfd(0, 0)) < 0)
+    if ((raw->eventfd = eventfd(0, EFD_CLOEXEC)) < 0)
     {
         retval = errno;
         goto ERR_EVENTFD;

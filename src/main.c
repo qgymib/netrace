@@ -5,14 +5,13 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <assert.h>
 #include <sys/ptrace.h>
 #include <sys/wait.h>
 #include <sys/syscall.h>
 #include <netinet/in.h>
-#include <arpa/inet.h>
 #include "runtime/__init__.h"
 #include "utils/defs.h"
+#include "utils/cmdoption.h"
 #include "utils/log.h"
 #include "utils/socket.h"
 #include "utils/syscall.h"
@@ -24,27 +23,27 @@
 /**
  * @brief System call tracing table.
  */
-// clang-format off
+/* clang-format off */
 #define SYSCALL_TRACING_TABLE(xx)   \
     xx(SYS_socket,  s_trace_syscall_socket_enter,   s_trace_syscall_socket_leave)   \
     xx(SYS_close,   s_trace_syscall_close_enter,    SYSCALL_SKIP)                   \
     xx(SYS_connect, s_trace_syscall_connect_enter,  s_trace_syscall_connect_leave)  \
     xx(SYS_clone,   SYSCALL_SKIP,                   SYSCALL_SKIP)
-// clang-format on
+/* clang-format on */
 
-static int do_child()
+static int do_child(const nt_cmd_opt_t* opt, int prog_pipe[2])
 {
     int code = 0;
 
     /* Close the read end of the pipe. */
-    close(G->prog_pipe[0]);
-    G->prog_pipe[0] = -1;
+    close(prog_pipe[0]);
+    prog_pipe[0] = -1;
 
     /* Setup trace. */
     if (ptrace(PTRACE_TRACEME, 0, NULL, NULL) < 0)
     {
         code = errno;
-        write(G->prog_pipe[1], &code, sizeof(code));
+        write(prog_pipe[1], &code, sizeof(code));
     }
 
     /*
@@ -53,10 +52,10 @@ static int do_child()
      * 1. Stop and raise `SIGTRAP` to parent.
      * 2. Close pipe.
      */
-    if (execvp(G->prog_args[0], G->prog_args) < 0)
+    if (execvp(opt->prog_args[0], opt->prog_args) < 0)
     {
         code = errno;
-        write(G->prog_pipe[1], &code, sizeof(code));
+        write(prog_pipe[1], &code, sizeof(code));
     }
 
     return EXIT_FAILURE;
@@ -70,7 +69,7 @@ static void s_trace_setup(prog_node_t* info)
     long trace_option =
         PTRACE_O_TRACECLONE | PTRACE_O_TRACEEXEC | PTRACE_O_TRACEFORK | PTRACE_O_TRACEVFORK;
     /* clang-format off */
-    NT_ASSERT(ptrace(PTRACE_SETOPTIONS, info->pid, 0, trace_option), ==, 0,
+    NT_ASSERT(ptrace(PTRACE_SETOPTIONS, info->pid, 0, trace_option) == 0,
         "(%d) %s", errno, strerror(errno));
     /* clang-format on */
 }
@@ -87,14 +86,10 @@ static prog_node_t* s_find_proc(pid_t pid)
     return container_of(it, prog_node_t, node);
 }
 
-static void s_check_child_exit_reason(void)
+static void s_check_child_exit_reason(int prog_pipe[2])
 {
     int     code = 0;
-    ssize_t read_sz = 0;
-    do
-    {
-        read_sz = read(G->prog_pipe[0], &code, sizeof(code));
-    } while (read_sz < 0 && errno == EINTR);
+    ssize_t read_sz = nt_read(prog_pipe[0], &code, sizeof(code));
 
     /* There are error from child process, probably because invalid program
      * path. */
@@ -105,7 +100,7 @@ static void s_check_child_exit_reason(void)
     }
 
     /* There are error from pipe. */
-    NT_ASSERT(read_sz, ==, 0, "Pipe error: (%d) %s.", errno, strerror(errno));
+    NT_ASSERT(read_sz == 0, "Pipe error: (%d) %s.", errno, strerror(errno));
 
     /* Pipe closed, child exec() success. */
 }
@@ -114,12 +109,13 @@ static void s_trace_syscall_socket_enter(prog_node_t* prog)
 {
     sock_node_t* sock = nt_calloc(1, sizeof(sock_node_t));
     sock->fd = -1;
+    sock->channel = -1;
     sock->domain = nt_get_syscall_arg(prog->pid, 0);
     sock->type = nt_get_syscall_arg(prog->pid, 1) & 0xFF;
     sock->protocol = nt_get_syscall_arg(prog->pid, 2);
 
     /* clang-format off */
-    NT_ASSERT(ev_map_insert(&prog->sock_map, &sock->node), ==, NULL,
+    NT_ASSERT(ev_map_insert(&prog->sock_map, &sock->node) == NULL,
         "Conflict node: pid=%d, fd=%d.", prog->pid, sock->fd);
     /* clang-format on */
     prog->sock_last = sock;
@@ -141,54 +137,67 @@ static void s_trace_syscall_socket_leave(prog_node_t* prog)
     }
 
     /* clang-format off */
-    NT_ASSERT(ev_map_insert(&prog->sock_map, &sock->node), ==, NULL,
+    NT_ASSERT(ev_map_insert(&prog->sock_map, &sock->node) == NULL,
         "Conflict node: pid=%d, fd=%d.", prog->pid, sock->fd);
     /* clang-format on */
 }
 
-static void s_trace_syscall_close_enter(prog_node_t* prog)
+static sock_node_t* s_prog_search_sock(prog_node_t* prog, int fd)
 {
     sock_node_t tmp;
-    tmp.fd = nt_get_syscall_arg(prog->pid, 0);
+    tmp.fd = fd;
     ev_map_node_t* it = ev_map_find(&prog->sock_map, &tmp.node);
     if (it == NULL)
+    {
+        return NULL;
+    }
+
+    return container_of(it, sock_node_t, node);
+}
+
+static void s_trace_syscall_close_enter(prog_node_t* prog)
+{
+    int          fd = nt_get_syscall_arg(prog->pid, 0);
+    sock_node_t* sock = s_prog_search_sock(prog, fd);
+    if (sock == NULL)
     {
         return;
     }
 
-    sock_node_t* sock = container_of(it, sock_node_t, node);
     ev_map_erase(&prog->sock_map, &sock->node);
     nt_sock_node_release(sock);
 }
 
 static void s_trace_syscall_connect_enter(prog_node_t* prog)
 {
-    sock_node_t tmp;
-    tmp.fd = nt_get_syscall_arg(prog->pid, 0);
-    ev_map_node_t* it = ev_map_find(&prog->sock_map, &tmp.node);
-    if (it == NULL)
+    int          fd = nt_get_syscall_arg(prog->pid, 0);
+    sock_node_t* sock = s_prog_search_sock(prog, fd);
+    if (sock == NULL)
     {
-        LOG_E("pid=%d cannot find fd=%d.", prog->pid, tmp.fd);
+        LOG_E("pid=%d cannot find fd=%d.", prog->pid, fd);
         prog->sock_last = NULL;
         return;
     }
-
-    sock_node_t* sock = container_of(it, sock_node_t, node);
     prog->sock_last = sock;
 
     /* Backup connect address. */
-    long p_sockaddr = nt_get_syscall_arg(prog->pid, 1);
-    nt_syscall_getdata(prog->pid, p_sockaddr, &sock->peer_addr, sizeof(struct sockaddr_in));
-    if (sock->peer_addr.ss_family == AF_INET6)
-    {
-        nt_syscall_getdata(prog->pid, p_sockaddr, &sock->peer_addr, sizeof(struct sockaddr_in6));
-    }
+    long p_sockaddr = nt_syscall_get_sockaddr(prog->pid, 1, &sock->peer_addr);
 
+    /* Parser peer information. */
     char peer_ip[64];
     int  peer_port = 0;
     nt_ip_name((struct sockaddr*)&sock->peer_addr, peer_ip, sizeof(peer_ip), &peer_port);
     const char* sock_type_name = nt_socktype_name(sock->type);
 
+    struct sockaddr_storage proxyaddr;
+    if (sock->type == SOCK_DGRAM && peer_port == 53 && G->dns != NULL)
+    {
+        LOG_I("Redirect dns://%s:%d", peer_ip, peer_port);
+        nt_dns_proxy_local_addr(G->dns, &proxyaddr);
+        goto REWRITE_ADDRESS;
+    }
+
+    /* Check filter. */
     if (nt_ipfilter_check(G->ipfilter, sock->type, (struct sockaddr*)&sock->peer_addr))
     {
         LOG_I("Bypass %s://%s:%d", sock_type_name, peer_ip, peer_port);
@@ -197,7 +206,6 @@ static void s_trace_syscall_connect_enter(prog_node_t* prog)
     LOG_I("Redirect %s://%s:%d", sock_type_name, peer_ip, peer_port);
 
     /* Create proxy channel. */
-    struct sockaddr_storage proxyaddr;
     sock->channel = G->proxy->channel_create(G->proxy, sock->type,
                                              (struct sockaddr*)&sock->peer_addr, &proxyaddr);
     if (sock->channel < 0)
@@ -205,10 +213,9 @@ static void s_trace_syscall_connect_enter(prog_node_t* prog)
         return;
     }
 
+REWRITE_ADDRESS:
     /* Overwrite connect address. */
-    size_t newaddrlen =
-        proxyaddr.ss_family == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
-    nt_syscall_setdata(prog->pid, p_sockaddr, &proxyaddr, newaddrlen);
+    nt_syscall_set_sockaddr(prog->pid, p_sockaddr, &proxyaddr);
 }
 
 static void s_trace_syscall_connect_leave(prog_node_t* prog)
@@ -296,7 +303,7 @@ static prog_node_t* s_prog_node_save(pid_t pid)
     return info;
 }
 
-static void do_trace()
+static void do_trace(const nt_cmd_opt_t* opt, int prog_pipe[2])
 {
     while (ev_map_size(&G->prog_map) != 0)
     {
@@ -337,8 +344,7 @@ static void do_trace()
                 }
             }
 
-            NT_ASSERT(ptrace(PTRACE_SYSCALL, pid, 0, sig), ==, 0, "(%d) %s", errno,
-                      strerror(errno));
+            NT_ASSERT(ptrace(PTRACE_SYSCALL, pid, 0, sig) == 0, "(%d) %s", errno, strerror(errno));
             continue;
         }
 
@@ -346,7 +352,7 @@ static void do_trace()
         {
             if (pid == G->prog_pid)
             {
-                s_check_child_exit_reason();
+                s_check_child_exit_reason(prog_pipe);
                 if (WIFEXITED(status))
                 {
                     G->prog_exit_retval = WEXITSTATUS(status);
@@ -354,7 +360,7 @@ static void do_trace()
                 else
                 {
                     G->prog_exit_retval = EXIT_FAILURE;
-                    LOG_W("`%s` exit abnormal, set our exitcode to %d.", G->prog_args[0],
+                    LOG_W("`%s` exit abnormal, set our exitcode to %d.", opt->prog_args[0],
                           G->prog_exit_retval);
                 }
             }
@@ -367,14 +373,20 @@ static void do_trace()
     }
 }
 
-static int do_parent(void)
+static int do_parent(const nt_cmd_opt_t* opt, int prog_pipe[2], pid_t pid)
 {
     /* Close the write end of the pipe. */
-    close(G->prog_pipe[1]);
-    G->prog_pipe[1] = -1;
+    close(prog_pipe[1]);
+    prog_pipe[1] = -1;
+
+    /* Initialize global runtime. */
+    nt_runtime_init(opt, pid);
+
+    /* Save record */
+    s_prog_node_save(pid);
 
     /* Trace child. */
-    do_trace();
+    do_trace(opt, prog_pipe);
     return G->prog_exit_retval;
 }
 
@@ -385,26 +397,30 @@ static void s_at_exit(void)
 
 int main(int argc, char* argv[])
 {
+    int ret;
+
     /* Register global cleanup hook */
     atexit(s_at_exit);
 
-    /* Initialize global runtime. */
-    nt_runtime_init(argc, argv);
+    /* Parser command line arguments. */
+    nt_cmd_opt_t options;
+    nt_cmd_opt_parse(&options, argc, argv);
 
     /* Setup pipe between parent and child, to see if there are any error before
      * executing program. */
-    NT_ASSERT(pipe2(G->prog_pipe, O_CLOEXEC), ==, 0, "(%d) %s", errno, strerror(errno));
+    int prog_pipe[2]; /* [0] for read, [1] for write. */
+    NT_ASSERT(pipe2(prog_pipe, O_CLOEXEC) == 0, "(%d) %s", errno, strerror(errno));
 
-    G->prog_pid = fork();
-    NT_ASSERT(G->prog_pid, >=, 0, "fork() failed: (%d) %s.", errno, strerror(errno));
+    pid_t prog_pid = fork();
+    NT_ASSERT(prog_pid >= 0, "fork() failed: (%d) %s.", errno, strerror(errno));
 
-    if (G->prog_pid == 0)
+    if (prog_pid == 0)
     {
-        return do_child();
+        return do_child(&options, prog_pipe);
     }
 
-    /* Save record */
-    s_prog_node_save(G->prog_pid);
+    ret = do_parent(&options, prog_pipe, prog_pid);
+    nt_cmd_opt_free(&options);
 
-    return do_parent();
+    return ret;
 }

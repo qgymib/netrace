@@ -13,10 +13,10 @@
 
 typedef struct test_grandchild
 {
-    int                listen_fd;
-    struct sockaddr_in listen_addr;
-    int                looping;
-    pthread_t          tid;
+    int                     listen_fd;
+    struct sockaddr_storage listen_addr;
+    int                     looping;
+    pthread_t               tid;
 } test_grandchild_t;
 
 static test_grandchild_t* s_grandchild = NULL;
@@ -40,20 +40,8 @@ static void* s_grandchild_worker(void* arg)
 TEST_FIXTURE_SETUP(grandchild)
 {
     s_grandchild = calloc(1, sizeof(test_grandchild_t));
-    s_grandchild->listen_fd = socket(AF_INET, SOCK_STREAM, 0);
+    s_grandchild->listen_fd = nt_socket_listen("127.0.0.1", 0, 0, &s_grandchild->listen_addr);
     ASSERT_GE_INT(s_grandchild->listen_fd, 0);
-
-    /* Bind to random local port. */
-    struct sockaddr* addr = (struct sockaddr*)&s_grandchild->listen_addr;
-    socklen_t        addrlen = sizeof(s_grandchild->listen_addr);
-    nt_ip_addr("127.0.0.1", 0, addr);
-    ASSERT_EQ_INT(bind(s_grandchild->listen_fd, addr, addrlen), 0);
-
-    /* Get bind address. */
-    ASSERT_EQ_INT(getsockname(s_grandchild->listen_fd, addr, &addrlen), 0);
-
-    /* Start listen. */
-    ASSERT_EQ_INT(listen(s_grandchild->listen_fd, 1024), 0);
 
     s_grandchild->looping = 1;
     ASSERT_EQ_INT(pthread_create(&s_grandchild->tid, NULL, s_grandchild_worker, NULL), 0);
@@ -72,7 +60,7 @@ TEST_FIXTURE_TEARDOWN(grandchild)
 static void s_grandchild_connect_and_close(struct sockaddr_in* remote)
 {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
-    NT_ASSERT(fd, >=, 0, "socket() failed: (%d) %s", errno, strerror(errno));
+    NT_ASSERT(fd >= 0, "socket() failed: (%d) %s", errno, strerror(errno));
 
     assert(connect(fd, (struct sockaddr*)remote, sizeof(*remote)) == 0);
 
@@ -82,14 +70,10 @@ static void s_grandchild_connect_and_close(struct sockaddr_in* remote)
     socklen_t          addrlen = sizeof(peeraddr);
     assert(getpeername(fd, addr, &addrlen) == 0);
 
-    /*
-     *
-     *
-     */
     int remote_port = ntohs(remote->sin_port);
     int peer_port = ntohs(peeraddr.sin_port);
     /* clang-format off */
-    NT_ASSERT(peer_port, !=, remote_port,
+    NT_ASSERT(peer_port != remote_port,
         "peer_port=%d, remote_port=%d.\n"
         "The `remote_port` is where the test want to connect to. The `peer_port` is where\n"
         "the test actually connect to. Due to the destination is overwritten by netrace,\n"
@@ -130,7 +114,10 @@ TEST_SUBROUTE(grandchild_connect)
 
 TEST_F(grandchild, connect)
 {
+    int port = 0;
+    ASSERT_EQ_INT(nt_ip_name((struct sockaddr*)&s_grandchild->listen_addr, NULL, 0, &port), 0);
+
     char buff[64];
-    snprintf(buff, sizeof(buff), "--port=%d", ntohs(s_grandchild->listen_addr.sin_port));
+    snprintf(buff, sizeof(buff), "--port=%d", port);
     TEST_CHECK_SUBROUTE(grandchild_connect, buff);
 }

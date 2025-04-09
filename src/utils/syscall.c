@@ -93,3 +93,28 @@ void nt_syscall_setdata(pid_t pid, long addr, const void* src, size_t len)
         write_sz += copy_sz;
     }
 }
+
+long nt_syscall_get_sockaddr(pid_t pid, int arg, struct sockaddr_storage* data)
+{
+    const size_t sockv4_len = sizeof(struct sockaddr_in);
+    const size_t sockv6_len = sizeof(struct sockaddr_in6);
+    long         p_addr = nt_get_syscall_arg(pid, arg);
+
+    /* Try get IPv4 address. */
+    nt_syscall_getdata(pid, p_addr, data, sockv4_len);
+
+    if (data->ss_family == AF_INET6)
+    {
+        nt_syscall_getdata(pid, p_addr, data, sockv6_len);
+    }
+
+    return p_addr;
+}
+
+void nt_syscall_set_sockaddr(pid_t pid, long addr, const struct sockaddr_storage* data)
+{
+    const size_t sockv4_len = sizeof(struct sockaddr_in);
+    const size_t sockv6_len = sizeof(struct sockaddr_in6);
+    size_t write_sz = data->ss_family == AF_INET ? sockv4_len : sockv6_len;
+    nt_syscall_setdata(pid, addr, data, write_sz);
+}

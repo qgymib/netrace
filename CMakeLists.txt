@@ -26,13 +26,17 @@ endfunction()
 
 add_library(lib${PROJECT_NAME} STATIC
     "src/runtime/__init__.c"
+    "src/runtime/dns.c"
     "src/runtime/raw.c"
     "src/runtime/socks5.c"
+    "src/utils/cmdoption.c"
+    "src/utils/dns.c"
     "src/utils/ipfilter.c"
     "src/utils/list.c"
     "src/utils/log.c"
     "src/utils/map.c"
     "src/utils/memory.c"
+    "src/utils/random.c"
     "src/utils/socket.c"
     "src/utils/str.c"
     "src/utils/syscall.c"

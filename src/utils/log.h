@@ -14,15 +14,15 @@
  * @brief Assert condition is established.
  * @note It is not affected by #NDEBUG.
  */
-#define NT_ASSERT(a, OP, b, fmt, ...)                                                              \
+#define NT_ASSERT(exp, fmt, ...)                                                                   \
     do                                                                                             \
     {                                                                                              \
-        if ((a)OP(b))                                                                              \
+        if (exp)                                                                                   \
         {                                                                                          \
             break;                                                                                 \
         }                                                                                          \
-        fprintf(stderr, "%s:%d: %s: Assertion `%s %s %s` failed: " fmt "\n", __FILE__, __LINE__,  \
-                __FUNCTION__, #a, #OP, #b, ##__VA_ARGS__);                                         \
+        fprintf(stderr, "%s:%d: %s: Assertion `%s` failed: " fmt "\n", __FILE__, __LINE__,         \
+                __FUNCTION__, #exp, ##__VA_ARGS__);                                                \
         abort();                                                                                   \
     } while (0)
 

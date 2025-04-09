@@ -35,6 +35,14 @@ int nt_ip_name(const struct sockaddr* addr, char* ip, size_t len, int* port);
 int nt_nonblock(int fd, int set);
 
 /**
+ * @brief Set or remove close-on-exec flag.
+ * @param[in] fd  FD.
+ * @param[in] set Is set.
+ * @return 0 if success, errno if failed.
+ */
+int nt_cloexec(int fd, int set);
+
+/**
  * @brief Like read(), but handle #EINTR.
  */
 ssize_t nt_read(int fd, void* buf, size_t size);
@@ -57,6 +65,55 @@ void nt_sockaddr_copy(struct sockaddr* dst, const struct sockaddr* src);
  * @return Name string.
  */
 const char* nt_socktype_name(int type);
+
+/**
+ * @brief Like socket(), but set nonblock flag.
+ */
+int nt_socket(int domain, int type, int nonblock);
+
+/**
+ * @brief Create a socket, bind to address, and get bind address.
+ * @param[in] type      #SOCK_STREAM or #SOCK_DGRAM
+ * @param[in] ip        Local IP
+ * @param[in] port      Local Port.
+ * @param[in] nonblock  Set non-block mode.
+ * @param[out] addr     (Optional) Bind address.
+ * @return              Socket handle.
+ */
+int nt_socket_bind(int type, const char* ip, int port, int nonblock, struct sockaddr_storage* addr);
+
+/**
+ * @brief Create a socket, bind to address, and get bind address.
+ * @param[in] type      #SOCK_STREAM or #SOCK_DGRAM
+ * @param[in] nonblock  Set non-block mode.
+ * @param[in,out] addr  Bind address.
+ * @return              Socket handle.
+ */
+int nt_socket_bind_r(int type, int nonblock, struct sockaddr_storage* addr);
+
+/**
+ * @brief Create a TCP socket, and start listen.
+ * @param[in] ip        Local IP.
+ * @param[in] port      Local port.
+ * @param[in] nonblock  Set non-block mode.
+ * @param[out] addr     Bind address.
+ * @return              Socket handle.
+ */
+int nt_socket_listen(const char* ip, int port, int nonblock, struct sockaddr_storage* addr);
+
+/**
+ * @brief Like accept(), but handle #EINTR.
+ */
+int nt_accept(int fd);
+
+/**
+ * @brief Create a socket and connect to \p addr.
+ * @param[in] type      #SOCK_STREAM or #SOCK_DGRAM
+ * @param[in] addr      Peer address.
+ * @param[in] nonblock  Non-block flag.
+ * @return              Socket handle.
+ */
+int nt_socket_connect(int type, const struct sockaddr_storage* addr, int nonblock);
 
 #ifdef __cplusplus
 }

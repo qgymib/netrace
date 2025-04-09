@@ -6,34 +6,13 @@
 #include "utils/log.h"
 #include "utils/memory.h"
 #include "utils/str.h"
+#include "utils/urlparser.h"
+#include "utils/socket.h"
+#include "dns.h"
 #include "config.h"
 #include "__init__.h"
 
-#define NT_CMD_PARSE_OPTION(val, opt)                                                              \
-    do                                                                                             \
-    {                                                                                              \
-        const char* _opt = (opt);                                                                  \
-        size_t      _optlen = strlen(_opt);                                                        \
-        if (strncmp(argv[i], _opt, _optlen) != 0)                                                  \
-        {                                                                                          \
-            break;                                                                                 \
-        }                                                                                          \
-        if (argv[i][_optlen] == '=')                                                               \
-        {                                                                                          \
-            val = &argv[i][_optlen + 1];                                                           \
-        }                                                                                          \
-        else if (i == argc - 1)                                                                    \
-        {                                                                                          \
-            fprintf(stderr, "Missing value for option `%s`.\n", _opt);                             \
-            exit(EXIT_FAILURE);                                                                    \
-        }                                                                                          \
-        else                                                                                       \
-        {                                                                                          \
-            i++;                                                                                   \
-            val = argv[i];                                                                         \
-        }                                                                                          \
-        continue;                                                                                  \
-    } while (0)
+
 
 typedef struct nt_ipfilter_item
 {
@@ -67,54 +46,6 @@ static const nt_ipfilter_item_t s_ipfilter[] = {
     { SOCK_DGRAM,  "fe80::",      10,  0 },
 };
 
-// clang-format off
-static const char* s_help =
-CMAKE_PROJECT_NAME " - Trace and redirect network traffic (" CMAKE_PROJECT_VERSION ")\n"
-"Usage: " CMAKE_PROJECT_NAME " [options] prog [prog-args]\n"
-"Options:\n"
-"  --proxy=socks5://[user[:pass]@][host[:port]]\n"
-"      Set socks5 address.\n"
-"\n"
-"  --filter=RULE_LIST\n"
-"      Syntax:\n"
-"        RULE_LIST    := [RULE[,RULE,...]]\n"
-"        RULE         := [default]\n"
-"                        [TYPE://ip[:port][/?OPTIONS]]\n"
-"        TYPE         := [tcp | udp]\n"
-"        OPTIONS      := [OPTION[&OPTION&...]]\n"
-"        OPTION       := [mask=NUMBER]\n"
-"\n"
-"      Description:\n"
-"        Do not redirect any traffic if it match any of the rules. By default\n"
-"        all traffics to LAN and loopback are ignored. By using this option,\n"
-"        the builtin filter rules are overwritten, however you can use `default`\n"
-"        keyword to add these rules again.\n"
-"\n"
-"        The `port` is optional. If it is set to non-zero, only traffic send to\n"
-"        that port is ignored.\n"
-"\n"
-"        The `mask` is optional. If it is not set, treat as `32` for IPv4 or\n"
-"        `128` for IPv6.\n"
-"\n"
-"      Example:\n"
-"        --bypass=,\n"
-"            Redirect anything.\n"
-"        --bypass=udp://127.0.0.1\n"
-"            Only ignore udp packets send to 127.0.0.1, no matter which\n"
-"            destination port is.\n"
-"        --bypass=tcp://192.168.0.1:1234\n"
-"            Only ignore tcp transmissions connect to 192.168.0.1:1234\n"
-"        --bypass=default,udp://0.0.0.0/?mask=0\n"
-"            In addition to the default rules, ignore all IPv4 UDP transmissions.\n"
-"        --bypass=default,udp://0.0.0.0/?mask=0,udp://:::53/?mask=0\n"
-"            In addition to the default rules, ignore all IPv4 UDP transmissions,\n"
-"            ignore all IPv6 UDP transmissions whose destination port is 53.\n"
-"\n"
-"  -h, --help\n"
-"      Show this help and exit.\n"
-;
-// clang-format on
-
 static int s_on_cmp_prog(const ev_map_node_t* key1, const ev_map_node_t* key2, void* arg)
 {
     (void)arg;
@@ -127,72 +58,7 @@ static int s_on_cmp_prog(const ev_map_node_t* key1, const ev_map_node_t* key2, v
     return info1->pid < info2->pid ? -1 : 1;
 }
 
-static void s_setup_cmdline_append_prog_args(const char* arg)
-{
-    /* The first argument. */
-    if (G->prog_args == NULL)
-    {
-        G->prog_args = (char**)nt_malloc(sizeof(char*) * 2);
-        G->prog_args[0] = nt_strdup(arg);
-        G->prog_args[1] = NULL;
-        return;
-    }
 
-    /* More arguments. */
-    size_t prog_nargs = 0;
-    while (G->prog_args[prog_nargs] != NULL)
-    {
-        prog_nargs++;
-    }
-    G->prog_args = nt_realloc(G->prog_args, sizeof(char*) * (prog_nargs + 2));
-    G->prog_args[prog_nargs] = nt_strdup(arg);
-    G->prog_args[prog_nargs + 1] = NULL;
-}
-
-static void s_setup_cmdline(int argc, char* argv[])
-{
-    int i;
-    int flag_prog_args = 0;
-
-    for (i = 1; i < argc; i++)
-    {
-        if (flag_prog_args)
-        {
-            s_setup_cmdline_append_prog_args(argv[i]);
-            continue;
-        }
-
-        if (argv[i][0] != '-')
-        {
-            s_setup_cmdline_append_prog_args(argv[i]);
-            flag_prog_args = 1;
-            continue;
-        }
-
-        if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0)
-        {
-            fprintf(stdout, "%s\n", s_help);
-            exit(EXIT_SUCCESS);
-        }
-
-        NT_CMD_PARSE_OPTION(G->opt_proxy, "--proxy");
-        NT_CMD_PARSE_OPTION(G->opt_bypass, "--bypass");
-    }
-
-    if (G->prog_args == NULL)
-    {
-        LOG_E("Missing program path");
-        exit(EXIT_FAILURE);
-    }
-    if (G->opt_proxy == NULL)
-    {
-        G->opt_proxy = "socks5://" NT_DEFAULT_SOCKS5_ADDR ":" STRINGIFY(NT_DEFAULT_SOCKS5_PORT);
-    }
-    if (G->opt_bypass == NULL)
-    {
-        G->opt_bypass = "default";
-    }
-}
 
 void nt_prog_node_release(prog_node_t* node)
 {
@@ -280,7 +146,7 @@ static void s_setup_ipfilter_add_rule_list(const nt_ipfilter_item_t* items, size
     }
 }
 
-static void s_setup_ipfilter_add_rule(const char* str, size_t len)
+static void s_setup_ipfilter_add_rule(const nt_cmd_opt_t* opt, const char* str, size_t len)
 {
     if (strncmp(str, "default", len) == 0)
     {
@@ -294,7 +160,7 @@ static void s_setup_ipfilter_add_rule(const char* str, size_t len)
     nt_free(url);
     if (ret != 0)
     {
-        LOG_E("parse rule `%s` failed.", G->opt_bypass);
+        LOG_E("parse rule `%s` failed.", opt->opt_bypass);
         exit(EXIT_FAILURE);
     }
 
@@ -305,12 +171,12 @@ static void s_setup_ipfilter_add_rule(const char* str, size_t len)
     s_setup_ipfilter_add_rule_list(&item, 1);
 }
 
-static void s_setup_ipfilter(void)
+static void s_setup_ipfilter(const nt_cmd_opt_t* opt)
 {
     G->ipfilter = nt_ipfilter_create();
 
     const char* pos;
-    const char* rule = G->opt_bypass;
+    const char* rule = opt->opt_bypass;
     for (; (pos = strstr(rule, ",")) != NULL; rule = pos + 1)
     {
         size_t len = pos - rule;
@@ -318,28 +184,75 @@ static void s_setup_ipfilter(void)
         {
             continue;
         }
-        s_setup_ipfilter_add_rule(rule, pos - rule);
+        s_setup_ipfilter_add_rule(opt, rule, pos - rule);
     }
     if (*rule != '\0')
     {
-        s_setup_ipfilter_add_rule(rule, strlen(rule));
+        s_setup_ipfilter_add_rule(opt, rule, strlen(rule));
     }
 }
 
-void nt_runtime_init(int argc, char* argv[])
+static int s_setup_dns_proxy(url_comp_t* url)
 {
-    G = nt_calloc(1, sizeof(*G));
-    G->prog_pid = -1;
-    G->prog_pipe[0] = -1;
-    G->prog_pipe[1] = -1;
-    ev_map_init(&G->prog_map, s_on_cmp_prog, NULL);
-    s_setup_cmdline(argc, argv);
-    s_setup_ipfilter();
+    int                   ret;
+    nt_dns_proxy_config_t config;
+    if ((ret = nt_ip_addr("127.0.0.1", 0, (struct sockaddr*)&config.local_addr)) != 0)
+    {
+        return ret;
+    }
 
-    if (nt_proxy_create(&G->proxy, G->opt_proxy) != 0)
+    const char*             ip = url->host;
+    unsigned                port = url->port != NULL ? *url->port : 53;
+    struct sockaddr_storage peer_addr;
+    if ((ret = nt_ip_addr(ip, port, (struct sockaddr*)&peer_addr)) != 0)
+    {
+        return ret;
+    }
+
+#if 1
+    ret = G->proxy->channel_create(G->proxy, SOCK_DGRAM, (struct sockaddr*)&peer_addr,
+                                   &config.peer_addr);
+    if (ret < 0)
+    {
+        LOG_E("Create DNS proxy channel failed.");
+        return ret;
+    }
+    G->dns_chid = ret;
+
+    return nt_dns_proxy_create(&G->dns, &config);
+#else
+    return 0;
+#endif
+}
+
+void nt_runtime_init(const nt_cmd_opt_t* opt, pid_t pid)
+{
+    int ret;
+    G = nt_calloc(1, sizeof(*G));
+    G->prog_pid = pid;
+    ev_map_init(&G->prog_map, s_on_cmp_prog, NULL);
+    s_setup_ipfilter(opt);
+
+    if (nt_proxy_create(&G->proxy, opt->opt_proxy) != 0)
     {
         LOG_E("Create proxy failed.");
         exit(EXIT_FAILURE);
+    }
+
+    if (opt->opt_dns != NULL)
+    {
+        url_comp_t* url = NULL;
+        if ((ret = nt_url_comp_parser(&url, opt->opt_dns)) != 0)
+        {
+            LOG_E("Invalid option for `--dns`: %d.", ret);
+            exit(EXIT_FAILURE);
+        }
+        if ((ret = s_setup_dns_proxy(url)) != 0)
+        {
+            LOG_E("Start DNS proxy failed: %d.", ret);
+            exit(EXIT_FAILURE);
+        }
+        nt_url_comp_free(url);
     }
 }
 
@@ -351,6 +264,12 @@ void nt_runtime_cleanup(void)
         return;
     }
 
+    if (G->dns != NULL)
+    {
+        G->proxy->channel_release(G->proxy, G->dns_chid);
+        nt_dns_proxy_destroy(G->dns);
+        G->dns = NULL;
+    }
     if (G->proxy != NULL)
     {
         G->proxy->release(G->proxy);
@@ -361,27 +280,6 @@ void nt_runtime_cleanup(void)
         prog_node_t* info = container_of(it, prog_node_t, node);
         ev_map_erase(&G->prog_map, it);
         nt_prog_node_release(info);
-    }
-    if (G->prog_args != NULL)
-    {
-        size_t i;
-        for (i = 0; G->prog_args[i] != NULL; i++)
-        {
-            nt_free(G->prog_args[i]);
-            G->prog_args[i] = NULL;
-        }
-        nt_free(G->prog_args);
-        G->prog_args = NULL;
-    }
-    if (G->prog_pipe[0] >= 0)
-    {
-        close(G->prog_pipe[0]);
-        G->prog_pipe[0] = -1;
-    }
-    if (G->prog_pipe[1] >= 0)
-    {
-        close(G->prog_pipe[1]);
-        G->prog_pipe[1] = -1;
     }
     if (G->ipfilter != NULL)
     {

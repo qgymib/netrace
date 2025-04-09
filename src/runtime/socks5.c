@@ -1,3 +1,7 @@
+/**
+ * @see https://datatracker.ietf.org/doc/html/rfc1928
+ * @see https://www.rfc-editor.org/rfc/rfc1929.html
+ */
 #include <assert.h>
 #include <errno.h>
 #include <pthread.h>
@@ -318,6 +322,7 @@ static void s_socks5_inbound_tcp_w(nt_proxy_socks5_t* socks5, socks5_channel_t* 
     ssize_t write_sz = nt_write(ch->inbound.event.data.fd, ch->dbuf, ch->dbuf_sz);
     if (write_sz < 0)
     {
+        LOG_D("write() failed: (%d) %s.", errno, strerror(errno));
         s_socks5_close_inbound(socks5, ch);
         return;
     }
@@ -349,7 +354,7 @@ static void s_socks5_inbound_tcp_w(nt_proxy_socks5_t* socks5, socks5_channel_t* 
 
 static void s_socks5_inbound_accept(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
 {
-    int fd = accept(ch->inbound.event.data.fd, NULL, NULL);
+    int fd = nt_accept(ch->inbound.event.data.fd);
     if (fd < 0)
     {
         s_socks5_close_inbound_outbound(socks5, ch);
@@ -360,7 +365,7 @@ static void s_socks5_inbound_accept(nt_proxy_socks5_t* socks5, socks5_channel_t*
     s_socks5_close_inbound(socks5, ch);
     ch->inbound.event.data.fd = fd;
     /* clang-format off */
-    NT_ASSERT(ev_map_insert(&socks5->sock_map, &ch->inbound.node), ==, NULL,
+    NT_ASSERT(ev_map_insert(&socks5->sock_map, &ch->inbound.node) == NULL,
         "ch=%d fd=%d", ch->chid, ch->inbound.event.data.fd);
     /* clang-format on */
     ch->inbound.event.events = EPOLLIN;
@@ -378,11 +383,13 @@ static void s_socks5_inbound_read(nt_proxy_socks5_t* socks5, socks5_channel_t* c
         ret = errno;
         if (ret != EAGAIN && ret != EWOULDBLOCK)
         {
+            LOG_D("read() failed: (%d) %s.", errno, strerror(errno));
             s_socks5_close_inbound(socks5, ch);
         }
     }
     else if (read_sz == 0)
     {
+        LOG_D("peer closed.");
         s_socks5_close_inbound(socks5, ch);
     }
     else
@@ -635,11 +642,11 @@ static void s_socks5_outbound_stage_auth_r(nt_proxy_socks5_t* socks5, socks5_cha
     s_socks5_setup_request(socks5, ch);
 }
 
-static void s_socks5_outbound_stage_connect_r(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
+static int s_socks5_outbound_stage_connect_r(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
 {
     if (ch->dbuf_sz < 5)
     {
-        return;
+        return NT_ERR(EAGAIN);
     }
 
     /* Check protocol and CONNECT result. */
@@ -647,7 +654,7 @@ static void s_socks5_outbound_stage_connect_r(nt_proxy_socks5_t* socks5, socks5_
     {
         s_socks5_close_inbound_outbound(socks5, ch);
         LOG_I("socks5 server refuse connect.");
-        return;
+        return NT_ERR(EPIPE);
     }
 
     size_t rsp_sz = 0;
@@ -671,7 +678,7 @@ static void s_socks5_outbound_stage_connect_r(nt_proxy_socks5_t* socks5, socks5_
     {
         s_socks5_close_inbound_outbound(socks5, ch);
         LOG_W("Unknown ATYP=%d.", ch->dbuf[3]);
-        return;
+        return NT_ERR(EINVAL);
     }
 
     ch->dbuf_sz -= rsp_sz;
@@ -682,6 +689,7 @@ static void s_socks5_outbound_stage_connect_r(nt_proxy_socks5_t* socks5, socks5_
 
     /* Change stage. */
     ch->stage = SOCKS5_FINISH;
+    return 0;
 }
 
 static void s_socks5_outbound_stage_finish_r(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
@@ -716,9 +724,13 @@ static void s_socks5_inbound_switch_read(nt_proxy_socks5_t* socks5, socks5_chann
     epoll_ctl(socks5->epollfd, op, ch->inbound.event.data.fd, &ch->inbound.event);
 }
 
-static void s_socks5_outbound_stage_udp_r(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
+static int s_socks5_outbound_stage_udp_r(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
 {
-    s_socks5_outbound_stage_connect_r(socks5, ch);
+    int ret;
+    if ((ret = s_socks5_outbound_stage_connect_r(socks5, ch)) != 0)
+    {
+        return ret;
+    }
 
     /*
      * Move socket to associate_fd.
@@ -730,28 +742,21 @@ static void s_socks5_outbound_stage_udp_r(nt_proxy_socks5_t* socks5, socks5_chan
     ch->outbound.event.events = 0;
     ch->outbound.event.data.fd = -1;
 
-    if ((ch->outbound.event.data.fd = socket(socks5->server_addr.ss_family, SOCK_DGRAM, 0)) < 0)
-    {
-        s_socks5_close_inbound_outbound(socks5, ch);
-        return;
-    }
-    nt_nonblock(ch->outbound.event.data.fd, 1);
-    NT_ASSERT(ev_map_insert(&socks5->sock_map, &ch->outbound.node), ==, NULL, "Conflit node");
-
     /* Connect to UDP relay server. */
-    struct sockaddr* addr = (struct sockaddr*)&ch->bindaddr;
-    socklen_t        addrlen = sizeof(ch->bindaddr);
-    if (connect(ch->outbound.event.data.fd, addr, addrlen) != 0)
+    if ((ret = nt_socket_connect(SOCK_DGRAM, &ch->bindaddr, 1)) < 0)
     {
         s_socks5_close_inbound_outbound(socks5, ch);
-        return;
+        return ret;
     }
+    ch->outbound.event.data.fd = ret;
+    NT_ASSERT(ev_map_insert(&socks5->sock_map, &ch->outbound.node) == NULL, "Conflict node");
 
     /* Now we can start reading from inbound and outbound. */
     s_socks5_inbound_switch_read(socks5, ch);
     s_socks5_outbound_switch_read(socks5, ch);
 
-    LOG_D("udp channel build success.");
+    LOG_D("udp chid=%d build success.", ch->chid);
+    return 0;
 }
 
 static void s_socks5_outbound_tcp_r(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
@@ -860,6 +865,7 @@ static void s_socks5_outbound_udp_r(nt_proxy_socks5_t* socks5, socks5_channel_t*
 
     if (read_sz < 0)
     {
+        LOG_E("read() failed: (%d) %s.", errno, strerror(errno));
         s_socks5_close_inbound_outbound(socks5, ch);
         return;
     }
@@ -961,8 +967,8 @@ static void s_socks5_handle_common(nt_proxy_socks5_t* socks5, socks5_channel_t* 
         s_socks5_close_outbound(socks5, ch);
     }
     if (ch->outbound.event.data.fd < 0 && ch->dbuf_sz == 0)
-    { /* If outbound is closed and nothing to download, close the inbound too.
-       */
+    { /* If outbound is closed and nothing to download, close the inbound too. */
+        LOG_D("Outbound is closed, noting to download.");
         s_socks5_close_inbound(socks5, ch);
     }
     if (ch->inbound.event.data.fd < 0 && ch->outbound.event.data.fd < 0)
@@ -1017,6 +1023,7 @@ static void s_socks5_handle_release_channel(nt_proxy_socks5_t* socks5, int chid)
     }
 
     socks5_channel_t* ch = container_of(it, socks5_channel_t, node);
+    LOG_D("chid=%d release, close inbound.", chid);
     s_socks5_close_inbound(socks5, ch);
 }
 
@@ -1087,7 +1094,7 @@ static void* s_socks5_loop(void* arg)
         }
         else if (ret < 0)
         {
-            NT_ASSERT(errno, ==, EINTR, "epoll_wait() failed: (%d) %s.", errno, strerror(errno));
+            NT_ASSERT(errno == EINTR, "epoll_wait() failed: (%d) %s.", errno, strerror(errno));
             continue;
         }
 
@@ -1111,59 +1118,25 @@ static int s_socks5_on_cmp_sock(const ev_map_node_t* key1, const ev_map_node_t* 
 
 static int s_socks5_channel_tcp_make(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
 {
-    int ret;
+    int         ret;
+    int         family = ch->peeraddr.ss_family;
+    const char* ip = (family == AF_INET) ? "127.0.0.1" : "::1";
+
     ch->u.tcp.islisten = 1;
-
-    int family = ch->peeraddr.ss_family;
-    if ((ch->inbound.event.data.fd = socket(family, SOCK_STREAM, 0)) < 0)
+    if ((ret = nt_socket_listen(ip, 0, 1, &ch->proxyaddr)) < 0)
     {
-        return NT_ERR(errno);
+        return ret;
     }
-    nt_nonblock(ch->inbound.event.data.fd, 1);
+    ch->inbound.event.data.fd = ret;
 
-    const char*      ip = (family == AF_INET) ? "127.0.0.1" : "::1";
-    struct sockaddr* addr = (struct sockaddr*)&ch->proxyaddr;
-    socklen_t        addrlen = sizeof(ch->proxyaddr);
-    nt_ip_addr(ip, 0, addr);
-    if (bind(ch->inbound.event.data.fd, addr, addrlen) < 0)
+    if ((ret = nt_socket_connect(SOCK_STREAM, &socks5->server_addr, 1)) < 0)
     {
-        ret = NT_ERR(errno);
         goto ERR_BIND;
     }
-    if (getsockname(ch->inbound.event.data.fd, addr, &addrlen) < 0)
-    {
-        ret = NT_ERR(errno);
-        goto ERR_BIND;
-    }
-    if (listen(ch->inbound.event.data.fd, 1) < 0)
-    {
-        ret = NT_ERR(errno);
-        goto ERR_BIND;
-    }
-
-    if ((ch->outbound.event.data.fd = socket(socks5->server_addr.ss_family, SOCK_STREAM, 0)) < 0)
-    {
-        ret = NT_ERR(errno);
-        goto ERR_BIND;
-    }
-    nt_nonblock(ch->outbound.event.data.fd, 1);
-
-    addr = (struct sockaddr*)&socks5->server_addr;
-    addrlen = sizeof(socks5->server_addr);
-    if (connect(ch->outbound.event.data.fd, addr, addrlen) < 0)
-    {
-        ret = errno;
-        if (ret != EAGAIN && ret != EINPROGRESS)
-        {
-            ret = NT_ERR(ret);
-            goto ERR_CONNECT;
-        }
-    }
+    ch->outbound.event.data.fd = ret;
 
     return 0;
 
-ERR_CONNECT:
-    close(ch->outbound.event.data.fd);
 ERR_BIND:
     close(ch->inbound.event.data.fd);
     return ret;
@@ -1180,53 +1153,24 @@ static int s_socks5_channel_udp_make(nt_proxy_socks5_t* socks5, socks5_channel_t
     int ret;
     ch->u.udp.associate_fd = -1;
 
-    int family = ch->peeraddr.ss_family;
-    if ((ch->inbound.event.data.fd = socket(family, SOCK_DGRAM, 0)) < 0)
+    /* For inbound we bind a random address to loopback UDP socket. */
+    int         family = ch->peeraddr.ss_family;
+    const char* ip = (family == AF_INET) ? "127.0.0.1" : "::1";
+    if ((ret = nt_socket_bind(SOCK_DGRAM, ip, 0, 1, &ch->proxyaddr)) < 0)
     {
-        return NT_ERR(errno);
+        return ret;
     }
-    nt_nonblock(ch->inbound.event.data.fd, 1);
+    ch->inbound.event.data.fd = ret;
 
-    const char*      ip = (family == AF_INET) ? "127.0.0.1" : "::1";
-    struct sockaddr* addr = (struct sockaddr*)&ch->proxyaddr;
-    socklen_t        addrlen = sizeof(ch->proxyaddr);
-    nt_ip_addr(ip, 0, addr);
-
-    if (bind(ch->inbound.event.data.fd, addr, addrlen) != 0)
+    /* Out bound is a TCP socket for handshake. The actual UDP data channel will create later. */
+    if ((ret = nt_socket_connect(SOCK_STREAM, &socks5->server_addr, 1)) < 0)
     {
-        ret = NT_ERR(errno);
         goto ERR_INBOUND_BIND;
     }
-    if (getsockname(ch->inbound.event.data.fd, addr, &addrlen) != 0)
-    {
-        ret = NT_ERR(errno);
-        goto ERR_INBOUND_BIND;
-    }
-
-    family = socks5->server_addr.ss_family;
-    if ((ch->outbound.event.data.fd = socket(family, SOCK_STREAM, 0)) < 0)
-    {
-        ret = NT_ERR(errno);
-        goto ERR_INBOUND_BIND;
-    }
-    nt_nonblock(ch->inbound.event.data.fd, 1);
-
-    addr = (struct sockaddr*)&socks5->server_addr;
-    addrlen = sizeof(socks5->server_addr);
-    if (connect(ch->outbound.event.data.fd, addr, addrlen) < 0)
-    {
-        ret = errno;
-        if (ret != EAGAIN && ret != EINPROGRESS)
-        {
-            ret = NT_ERR(ret);
-            goto ERR_OUTBOUND_CONNECT;
-        }
-    }
+    ch->outbound.event.data.fd = ret;
 
     return 0;
 
-ERR_OUTBOUND_CONNECT:
-    close(ch->outbound.event.data.fd);
 ERR_INBOUND_BIND:
     close(ch->inbound.event.data.fd);
     return ret;
@@ -1236,20 +1180,12 @@ static int s_socks5_channel_create(struct nt_proxy* thiz, int type, const struct
                                    struct sockaddr_storage* proxyaddr)
 {
     int ret;
+
+    /* Only support IPv4/IPv6, for UDP and TCP. */
     if ((peeraddr->sa_family != AF_INET && peeraddr->sa_family != AF_INET6) ||
         (type != SOCK_STREAM && type != SOCK_DGRAM))
     {
         return NT_ERR(ENOTSUP);
-    }
-
-    if (type == SOCK_DGRAM)
-    {
-        int port = 0;
-        nt_ip_name(peeraddr, NULL, 0, &port);
-        if (port != 53)
-        {
-            return NT_ERR(ENOTSUP);
-        }
     }
 
     nt_proxy_socks5_t* socks5 = container_of(thiz, nt_proxy_socks5_t, basis);
@@ -1307,6 +1243,7 @@ static void s_socks5_channel_release(struct nt_proxy* thiz, int channel)
     socks5_action_t*   act = nt_malloc(sizeof(socks5_action_t));
     act->type = SOCKS5_ACTION_RELEASE_CHANNEL;
     act->u.chid = channel;
+    LOG_D("Want close chid=%d", channel);
 
     pthread_mutex_lock(&socks5->actq_mutex);
     ev_list_push_back(&socks5->actq, &act->node);
@@ -1331,7 +1268,7 @@ static int s_socks5_create(nt_proxy_t** proxy, const url_comp_t* url)
         goto ERR_URL_PARSER;
     }
 
-    if ((socks5->epollfd = epoll_create(1024)) < 0)
+    if ((socks5->epollfd = epoll_create1(EPOLL_CLOEXEC)) < 0)
     {
         ret = NT_ERR(errno);
         goto ERR_EPOLL_CREATE;

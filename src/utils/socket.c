@@ -120,6 +120,66 @@ int nt_nonblock(int fd, int set)
 #endif
 }
 
+int nt_cloexec(int fd, int set)
+{
+#if defined(_AIX) || defined(__APPLE__) || defined(__DragonFly__) || defined(__FreeBSD__) ||       \
+    defined(__FreeBSD_kernel__) || defined(__linux__) || defined(__OpenBSD__) ||                   \
+    defined(__NetBSD__)
+    int r;
+
+    do
+    {
+        r = ioctl(fd, set ? FIOCLEX : FIONCLEX);
+    } while (r == -1 && errno == EINTR);
+
+    if (r)
+    {
+        return NT_ERR(errno);
+    }
+
+    return 0;
+#else
+    int r, flags;
+
+    do
+    {
+        r = fcntl(fd);
+    }
+    whlie(r == -1 && errno == EINTR);
+    if (r == -1)
+    {
+        return NT_ERR(errno);
+    }
+
+    /* Bail out now if already set/clear. */
+    if (!!(r & FD_CLOEXEC) == !!set)
+    {
+        return 0;
+    }
+
+    if (set)
+    {
+        flags = r | FD_CLOEXEC;
+    }
+    else
+    {
+        flags = r & ~FD_CLOEXEC;
+    }
+
+    do
+    {
+        r = fcntl(fd, F_SETFD, flags);
+    } while (r == -1 && errno == EINTR);
+
+    if (r)
+    {
+        return NT_ERR(errno);
+    }
+
+    return 0;
+#endif
+}
+
 ssize_t nt_read(int fd, void* buf, size_t size)
 {
     ssize_t read_sz;
@@ -163,4 +223,131 @@ const char* nt_socktype_name(int type)
     }
 
     return "unknown";
+}
+
+int nt_socket(int domain, int type, int nonblock)
+{
+    int fd = socket(domain, type | SOCK_CLOEXEC, 0);
+    if (fd < 0)
+    {
+        return NT_ERR(errno);
+    }
+
+    int ret = nt_nonblock(fd, nonblock);
+    if (ret < 0)
+    {
+        close(fd);
+        return ret;
+    }
+
+    return fd;
+}
+
+int nt_socket_bind(int type, const char* ip, int port, int nonblock, struct sockaddr_storage* addr)
+{
+    int                     ret;
+    struct sockaddr_storage tmp_addr;
+    if (addr == NULL)
+    {
+        addr = &tmp_addr;
+    }
+
+    if ((ret = nt_ip_addr(ip, port, (struct sockaddr*)addr)) < 0)
+    {
+        return ret;
+    }
+
+    return nt_socket_bind_r(type, nonblock, addr);
+}
+
+int nt_socket_bind_r(int type, int nonblock, struct sockaddr_storage* addr)
+{
+    int              fd, ret;
+    struct sockaddr* p_addr = (struct sockaddr*)addr;
+    socklen_t        addr_len = sizeof(*addr);
+
+    if ((fd = nt_socket(addr->ss_family, type, nonblock)) < 0)
+    {
+        return NT_ERR(errno);
+    }
+    if (bind(fd, p_addr, addr_len) != 0)
+    {
+        ret = NT_ERR(errno);
+        goto ERR;
+    }
+    if (getsockname(fd, p_addr, &addr_len) < 0)
+    {
+        ret = NT_ERR(errno);
+        goto ERR;
+    }
+
+    return fd;
+
+ERR:
+    close(fd);
+    return ret;
+}
+
+int nt_socket_listen(const char* ip, int port, int nonblock, struct sockaddr_storage* addr)
+{
+    int fd = nt_socket_bind(SOCK_STREAM, ip, port, nonblock, addr);
+    if (fd < 0)
+    {
+        return fd;
+    }
+
+    int ret = listen(fd, SOMAXCONN);
+    if (ret < 0)
+    {
+        ret = NT_ERR(errno);
+        close(fd);
+        return ret;
+    }
+
+    return fd;
+}
+
+int nt_accept(int fd)
+{
+    int c;
+    do
+    {
+        c = accept(fd, NULL, NULL);
+    } while (c < 0 && errno == EINTR);
+
+    int ret = nt_cloexec(c, 1);
+    if (ret != 0)
+    {
+        close(c);
+        return ret;
+    }
+
+    return c;
+}
+
+int nt_socket_connect(int type, const struct sockaddr_storage* addr, int nonblock)
+{
+    int fd, ret;
+    if ((fd = nt_socket(addr->ss_family, type, nonblock)) < 0)
+    {
+        return fd;
+    }
+
+    do
+    {
+        ret = connect(fd, (struct sockaddr*)addr, sizeof(*addr));
+    } while (ret == -1 && errno == EINTR);
+    if (ret == 0)
+    {
+        return fd;
+    }
+
+    ret = errno;
+    if (ret == EINPROGRESS || ret == EAGAIN)
+    {
+        return fd;
+    }
+
+    close(fd);
+    return NT_ERR(ret);
 }

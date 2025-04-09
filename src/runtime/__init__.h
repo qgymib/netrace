@@ -1,10 +1,11 @@
 #ifndef NT_RUNTIME_H
 #define NT_RUNTIME_H
 
-#include <netinet/in.h>
+#include "dns.h"
 #include "utils/map.h"
 #include "utils/urlparser.h"
 #include "utils/ipfilter.h"
+#include "utils/cmdoption.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -82,15 +83,16 @@ typedef struct prog_node
 
 typedef struct runtime
 {
-    const char* opt_proxy;  /* --proxy */
-    const char* opt_bypass; /* --bypass */
 
-    nt_proxy_t*    proxy; /* Proxy object. */
-    nt_ipfilter_t* ipfilter;
 
-    char**   prog_args;        /* Arguments for child program, ending with NULL. */
+    nt_proxy_t*     proxy; /* Proxy object. */
+    nt_ipfilter_t*  ipfilter;
+    nt_dns_proxy_t* dns;
+    int dns_chid;
+
+
     pid_t    prog_pid;         /* First child pid. */
-    int      prog_pipe[2];     /* [0] for read, [1] for write. */
+
     int      prog_exit_retval; /* First child exit code. */
     ev_map_t prog_map;         /* Program tracing map. Type: #prog_node_t. */
 } runtime_t;
@@ -108,7 +110,7 @@ extern const nt_proxy_protocol_t nt_proxy_protocol_socks5;
  * @param[in] argc  Argument count.
  * @param[in] argv  Argument list.
  */
-void nt_runtime_init(int argc, char* argv[]);
+void nt_runtime_init(const nt_cmd_opt_t* opt, pid_t pid);
 
 /**
  * @brief Cleanup runtime.
