@@ -423,6 +423,7 @@ void nt_dns_msg_free(nt_dns_msg_t* msg)
     s_dns_msg_free_resource(msg->answer, msg->header.ancount);
     s_dns_msg_free_resource(msg->authority, msg->header.nscount);
     s_dns_msg_free_resource(msg->additional, msg->header.arcount);
+    nt_free(msg);
 }
 
 int nt_dns_msg_build(const nt_dns_msg_t* msg, void* buff, size_t size)
