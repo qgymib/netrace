@@ -12,8 +12,6 @@
 #include "config.h"
 #include "__init__.h"
 
-
-
 typedef struct nt_ipfilter_item
 {
     int         type;
@@ -57,8 +55,6 @@ static int s_on_cmp_prog(const ev_map_node_t* key1, const ev_map_node_t* key2, v
     }
     return info1->pid < info2->pid ? -1 : 1;
 }
-
-
 
 void nt_prog_node_release(prog_node_t* node)
 {
@@ -130,7 +126,7 @@ static void s_setup_ipfilter_to_rule(nt_ipfilter_item_t* dst, const url_comp_t* 
     }
 }
 
-static void s_setup_ipfilter_add_rule_list(const nt_ipfilter_item_t* items, size_t size)
+static int s_setup_ipfilter_add_rule_list(const nt_ipfilter_item_t* items, size_t size)
 {
     size_t i;
     for (i = 0; i < size; i++)
@@ -140,56 +136,57 @@ static void s_setup_ipfilter_add_rule_list(const nt_ipfilter_item_t* items, size
         if (ret != 0)
         {
             LOG_E("Add ipfilter failed(%d): type=%d, ip=%s, mask=%u, port=%u", ret, item->type,
-                  item->ip, item->mask, item->port);
-            exit(EXIT_FAILURE);
+                  item->ip == NULL ? "nil" : item->ip, item->mask, item->port);
+            return NT_ERR(EINVAL);
         }
     }
+    return 0;
 }
 
-static void s_setup_ipfilter_add_rule(const nt_cmd_opt_t* opt, const char* str, size_t len)
+static int s_setup_ipfilter_add_rule(const nt_cmd_opt_t* opt, const char* str)
 {
-    if (strncmp(str, "default", len) == 0)
+    int ret;
+    if (strcmp(str, "default") == 0)
     {
-        s_setup_ipfilter_add_rule_list(s_ipfilter, ARRAY_SIZE(s_ipfilter));
-        return;
+        return s_setup_ipfilter_add_rule_list(s_ipfilter, ARRAY_SIZE(s_ipfilter));
     }
 
-    char*       url = nt_strndup(str, len);
     url_comp_t* comp = NULL;
-    int         ret = nt_url_comp_parser(&comp, url);
-    nt_free(url);
-    if (ret != 0)
+    if ((ret = nt_url_comp_parser(&comp, str)) != 0)
     {
         LOG_E("parse rule `%s` failed.", opt->opt_bypass);
-        exit(EXIT_FAILURE);
+        return ret;
     }
 
     nt_ipfilter_item_t item;
     s_setup_ipfilter_to_rule(&item, comp);
+
+    ret = s_setup_ipfilter_add_rule_list(&item, 1);
     nt_url_comp_free(comp);
 
-    s_setup_ipfilter_add_rule_list(&item, 1);
+    return ret;
 }
 
-static void s_setup_ipfilter(const nt_cmd_opt_t* opt)
+static int s_setup_ipfilter(const nt_cmd_opt_t* opt)
 {
+    int ret = 0;
     G->ipfilter = nt_ipfilter_create();
 
-    const char* pos;
-    const char* rule = opt->opt_bypass;
-    for (; (pos = strstr(rule, ",")) != NULL; rule = pos + 1)
+    char* saveptr;
+    char* rule = nt_strdup(opt->opt_bypass);
+    char* s = rule;
+    char* p;
+    while ((p = strtok_r(s, ",", &saveptr)) != NULL)
     {
-        size_t len = pos - rule;
-        if (len == 0)
+        s = NULL;
+        if ((ret = s_setup_ipfilter_add_rule(opt, p)) != 0)
         {
-            continue;
+            break;
         }
-        s_setup_ipfilter_add_rule(opt, rule, pos - rule);
     }
-    if (*rule != '\0')
-    {
-        s_setup_ipfilter_add_rule(opt, rule, strlen(rule));
-    }
+    nt_free(rule);
+
+    return ret;
 }
 
 static int s_setup_dns_proxy(url_comp_t* url)
@@ -231,7 +228,10 @@ void nt_runtime_init(const nt_cmd_opt_t* opt, pid_t pid)
     G = nt_calloc(1, sizeof(*G));
     G->prog_pid = pid;
     ev_map_init(&G->prog_map, s_on_cmp_prog, NULL);
-    s_setup_ipfilter(opt);
+    if ((ret = s_setup_ipfilter(opt)) != 0)
+    {
+        exit(EXIT_FAILURE);
+    }
 
     if (nt_proxy_create(&G->proxy, opt->opt_proxy) != 0)
     {
