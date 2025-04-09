@@ -1,7 +1,8 @@
-#include <stdio.h>
-#include "log.h"
-
 #include <stdarg.h>
+#include <stdio.h>
+#include <time.h>
+#include <sys/time.h>
+#include "log.h"
 
 static const char* s_log_str[] = { "T", "D", "I", "W", "E", "F" };
 
@@ -36,15 +37,25 @@ const char* nt_basename(const char* path)
 void nt_log(nt_log_level_t level, const char* file, const char* func, int line, const char* fmt,
             ...)
 {
+    struct timeval cur_time;
+    gettimeofday(&cur_time, NULL);
+
+    struct tm t;
+    localtime_r(&cur_time.tv_sec, &t);
+
+    char time_buf[64];
+    strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", &t);
+
     file = nt_basename(file);
-    fprintf(stderr, "[%s][%s:%d][%s] ", s_log_str[level], file, line, func);
+    fprintf(stdout, "[%s.%03d][%s][%s:%d][%s] ", time_buf, (int)(cur_time.tv_usec / 1000),
+            s_log_str[level], file, line, func);
 
     va_list ap;
     va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
+    vfprintf(stdout, fmt, ap);
     va_end(ap);
 
-    fprintf(stderr, "\n");
+    fprintf(stdout, "\n");
 }
 
 void nt_dump(const void* data, size_t size, size_t width)
