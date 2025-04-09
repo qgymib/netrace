@@ -37,10 +37,10 @@
  */
 #if EDOM > 0
 #define NT_ERR(x) (-(x))
-#define NT_SYSERR(x) (-(x))
+#define NT_STRERROR(x) strerror(-(x))
 #else
 #define NT_ERR(x) (x)
-#define NT_SYSERR(x) (x)
+#define NT_STRERROR(x) strerror(x)
 #endif
 
 #endif

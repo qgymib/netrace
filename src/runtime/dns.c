@@ -88,8 +88,6 @@ static int s_dns_handle_server(nt_dns_proxy_t* proxy)
         recvfrom(proxy->server_fd, proxy->rbuf, sizeof(proxy->rbuf), 0, addr, &addr_len);
     NT_ASSERT(recv_sz >= 0, "recvfrom() failed: (%d) %s", errno, strerror(errno));
 
-    NT_DUMP(proxy->rbuf, recv_sz);
-
     nt_dns_msg_t* msg = NULL;
     if ((ret = nt_dns_msg_parser(&msg, proxy->rbuf, recv_sz)) < 0)
     {
@@ -110,8 +108,8 @@ static int s_dns_handle_client(nt_dns_proxy_t* proxy)
     ssize_t read_sz = nt_read(proxy->client_fd, proxy->rbuf, sizeof(proxy->rbuf));
     if (read_sz < 0)
     {
-        LOG_E("read() failed: (%d) %s.", errno, strerror(errno));
-        return NT_ERR(errno);
+        LOG_E("read() failed: (%d) %s.", (int)read_sz, NT_STRERROR(read_sz));
+        return read_sz;
     }
 
     nt_dns_msg_t* msg = NULL;

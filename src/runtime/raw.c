@@ -391,26 +391,24 @@ static void s_proxy_raw_handle_inbound_tcp_r(nt_proxy_raw_t* raw, proxy_raw_chan
     ssize_t  read_sz = nt_read(ch->inbound.event.data.fd, buf, bufsz);
     if (read_sz < 0)
     {
-        ret = errno;
-        if (ret != EAGAIN && ret != EWOULDBLOCK)
+        ret = read_sz;
+        if (ret != NT_ERR(EAGAIN) && ret != NT_ERR(EWOULDBLOCK))
         { /* Peer error */
+            LOG_D("[CHID=%d] Inbound read() failed: (%d) %s. Close inbound.", ch->chid, ret,
+                  NT_STRERROR(ret));
             s_proxy_raw_close_inbound_channel(raw, ch);
         }
+        return;
     }
     else if (read_sz == 0)
     { /* Peer close. */
+        LOG_D("[CHID=%d] Inbound peer closed. Close inbound.", ch->chid);
         s_proxy_raw_close_inbound_channel(raw, ch);
+        return;
     }
     else
     {
         ch->ubuf_sz += read_sz;
-    }
-
-    /* If inbound is closed, and ubuf is empty, close outbound. */
-    if (ch->inbound.event.data.fd < 0 && ch->ubuf_sz == 0)
-    {
-        s_proxy_raw_close_outbound_channel(raw, ch);
-        return;
     }
 
     /* Write to outbound. */
@@ -499,26 +497,24 @@ static void s_proxy_raw_handle_outbound_r(nt_proxy_raw_t* raw, proxy_raw_channel
     ssize_t read_sz = nt_read(ch->outbound.event.data.fd, buf, bufsz);
     if (read_sz < 0)
     {
-        ret = errno;
-        if (ret != EAGAIN && ret != EWOULDBLOCK)
+        ret = read_sz;
+        if (ret != NT_ERR(EAGAIN) && ret != NT_ERR(EWOULDBLOCK))
         {
+            LOG_D("[CHID=%d] Outbound read() failed: (%d) %s. Close outbound.", ch->chid, ret,
+                  NT_STRERROR(ret));
             s_proxy_raw_close_outbound_channel(raw, ch);
         }
+        return;
     }
     else if (read_sz == 0)
     {
+        LOG_D("[CHID=%d] Outbound peer closed. Close outbound.", ch->chid);
         s_proxy_raw_close_outbound_channel(raw, ch);
+        return;
     }
     else
     {
         ch->dbuf_sz += read_sz;
-    }
-
-    /* If outbound is closed and dbuf is empty, close inbound. */
-    if (ch->outbound.event.data.fd < 0 && ch->dbuf_sz == 0)
-    {
-        s_proxy_raw_close_inbound_channel(raw, ch);
-        return;
     }
 
     /* Write to inbound. */
@@ -564,8 +560,19 @@ static void s_proxy_raw_handle_channel(nt_proxy_raw_t* raw, proxy_raw_channel_t*
         }
     }
 
+    if (ch->inbound.event.data.fd < 0 && ch->ubuf_sz == 0)
+    {
+        LOG_D("[CHID=%d] Inbound is closed and nothing to upload. Close outbound.", ch->chid);
+        s_proxy_raw_close_outbound_channel(raw, ch);
+    }
+    if (ch->outbound.event.data.fd < 0 && ch->dbuf_sz == 0)
+    {
+        LOG_D("[CHID=%d] Outbound is closed and nothing to download. Close inbound.", ch->chid);
+        s_proxy_raw_close_inbound_channel(raw, ch);
+    }
     if (ch->inbound.event.data.fd < 0 && ch->outbound.event.data.fd < 0)
     {
+        LOG_D("[CHID=%d] Both inbound and outbound are closed. Remove channel.", ch->chid);
         s_proxy_remove_and_release_channel(raw, ch);
     }
 }

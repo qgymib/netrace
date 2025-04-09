@@ -187,7 +187,8 @@ ssize_t nt_read(int fd, void* buf, size_t size)
     {
         read_sz = read(fd, buf, size);
     } while (read_sz == -1 && errno == EINTR);
-    return read_sz;
+
+    return read_sz >= 0 ? read_sz : NT_ERR(errno);
 }
 
 ssize_t nt_write(int fd, const void* buf, size_t size)
@@ -197,7 +198,8 @@ ssize_t nt_write(int fd, const void* buf, size_t size)
     {
         write_sz = write(fd, buf, size);
     } while (write_sz == -1 && errno == EINTR);
-    return write_sz;
+
+    return write_sz >= 0 ? write_sz : NT_ERR(errno);
 }
 
 void nt_sockaddr_copy(struct sockaddr* dst, const struct sockaddr* src)

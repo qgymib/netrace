@@ -145,40 +145,43 @@ static void s_socks5_release_server_info(nt_proxy_socks5_t* socks5)
     }
 }
 
-static void s_socks5_close_inbound(nt_proxy_socks5_t* socks5, socks5_channel_t* channel)
+static void s_socks5_close_inbound(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
 {
-    LOG_D("close inbound fd=%d.", channel->inbound.event.data.fd);
-    if (channel->inbound.event.data.fd >= 0)
+    if (ch->inbound.event.data.fd < 0)
     {
-        if (channel->inbound.event.events != 0)
-        {
-            epoll_ctl(socks5->epollfd, EPOLL_CTL_DEL, channel->inbound.event.data.fd,
-                      &channel->inbound.event);
-            channel->inbound.event.events = 0;
-        }
-        ev_map_erase(&socks5->sock_map, &channel->inbound.node);
-        close(channel->inbound.event.data.fd);
-        channel->inbound.event.data.fd = -1;
+        return;
     }
+
+    LOG_D("[CHID=%d] Close inbound fd=%d.", ch->chid, ch->inbound.event.data.fd);
+    if (ch->inbound.event.events != 0)
+    {
+        epoll_ctl(socks5->epollfd, EPOLL_CTL_DEL, ch->inbound.event.data.fd, &ch->inbound.event);
+        ch->inbound.event.events = 0;
+    }
+    ev_map_erase(&socks5->sock_map, &ch->inbound.node);
+    close(ch->inbound.event.data.fd);
+    ch->inbound.event.data.fd = -1;
 }
 
 static void s_socks5_close_outbound(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
 {
-    LOG_D("close outbound fd=%d.", ch->outbound.event.data.fd);
-    if (ch->outbound.event.data.fd >= 0)
+    if (ch->outbound.event.data.fd < 0)
     {
-        if (ch->outbound.event.events != 0)
-        {
-            epoll_ctl(socks5->epollfd, EPOLL_CTL_DEL, ch->outbound.event.data.fd,
-                      &ch->outbound.event);
-            ch->outbound.event.events = 0;
-        }
-        ev_map_erase(&socks5->sock_map, &ch->outbound.node);
-        close(ch->outbound.event.data.fd);
-        ch->outbound.event.data.fd = -1;
+        return;
     }
-    if (ch->type == SOCK_DGRAM && ch->u.udp.associate_fd >= 0)
+
+    LOG_D("[CHID=%d] Close outbound fd=%d.", ch->chid, ch->outbound.event.data.fd);
+    if (ch->outbound.event.events != 0)
     {
+        epoll_ctl(socks5->epollfd, EPOLL_CTL_DEL, ch->outbound.event.data.fd, &ch->outbound.event);
+        ch->outbound.event.events = 0;
+    }
+    ev_map_erase(&socks5->sock_map, &ch->outbound.node);
+    close(ch->outbound.event.data.fd);
+    ch->outbound.event.data.fd = -1;
+
+    if (ch->type == SOCK_DGRAM && ch->u.udp.associate_fd >= 0)
+    { /* For UDP socket we also need to close association fd. */
         close(ch->u.udp.associate_fd);
         ch->u.udp.associate_fd = -1;
     }
@@ -322,7 +325,8 @@ static void s_socks5_inbound_tcp_w(nt_proxy_socks5_t* socks5, socks5_channel_t* 
     ssize_t write_sz = nt_write(ch->inbound.event.data.fd, ch->dbuf, ch->dbuf_sz);
     if (write_sz < 0)
     {
-        LOG_D("write() failed: (%d) %s.", errno, strerror(errno));
+        LOG_D("[CHID=%d] write() failed: (%d) %s. Close inbound.", ch->chid, write_sz,
+              NT_STRERROR(write_sz));
         s_socks5_close_inbound(socks5, ch);
         return;
     }
@@ -357,11 +361,13 @@ static void s_socks5_inbound_accept(nt_proxy_socks5_t* socks5, socks5_channel_t*
     int fd = nt_accept(ch->inbound.event.data.fd);
     if (fd < 0)
     {
+        LOG_D("[CHID=%d] Accept failed: (%d) %s.", ch->chid, fd, NT_STRERROR(fd));
         s_socks5_close_inbound_outbound(socks5, ch);
         return;
     }
 
     /* Close and register connection for read. */
+    LOG_D("[CHID=%d] Replace inbound with accepted client connection.", ch->chid);
     s_socks5_close_inbound(socks5, ch);
     ch->inbound.event.data.fd = fd;
     /* clang-format off */
@@ -380,29 +386,24 @@ static void s_socks5_inbound_read(nt_proxy_socks5_t* socks5, socks5_channel_t* c
     ssize_t  read_sz = nt_read(ch->inbound.event.data.fd, buf, bufsz);
     if (read_sz < 0)
     {
-        ret = errno;
-        if (ret != EAGAIN && ret != EWOULDBLOCK)
+        ret = read_sz;
+        if (ret != NT_ERR(EAGAIN) && ret != NT_ERR(EWOULDBLOCK))
         {
-            LOG_D("read() failed: (%d) %s.", errno, strerror(errno));
+            LOG_D("[CHID=%d] read() failed: (%d) %s. Close inbound.", ch->chid, ret,
+                  NT_STRERROR(ret));
             s_socks5_close_inbound(socks5, ch);
         }
+        return;
     }
     else if (read_sz == 0)
     {
-        LOG_D("peer closed.");
+        LOG_D("[CHID=%d] Peer closed, close inbound.", ch->chid);
         s_socks5_close_inbound(socks5, ch);
+        return;
     }
     else
     {
         ch->ubuf_sz += read_sz;
-    }
-
-    /* If inbound closed and socks5 handshake not finished, close outbound. */
-    if (ch->inbound.event.data.fd < 0 && ch->outbound.event.data.fd >= 0 &&
-        ch->stage != SOCKS5_FINISH)
-    {
-        s_socks5_close_outbound(socks5, ch);
-        return;
     }
 
     /* Write to outbound. */
@@ -421,7 +422,6 @@ static void s_socks5_inbound_tcp_r(nt_proxy_socks5_t* socks5, socks5_channel_t* 
     {
         ch->u.tcp.islisten = 0;
         s_socks5_inbound_accept(socks5, ch);
-        LOG_D("accept inbound connection.");
         return;
     }
 
@@ -451,14 +451,9 @@ static void s_socks5_outbound_tcp_w(nt_proxy_socks5_t* socks5, socks5_channel_t*
     ssize_t write_sz = nt_write(ch->outbound.event.data.fd, ch->ubuf, ch->ubuf_sz);
     if (write_sz < 0)
     {
+        LOG_D("[CHID=%d] write() failed: (%d) %s. Close outbound", ch->chid, write_sz,
+              NT_STRERROR(write_sz));
         s_socks5_close_outbound(socks5, ch);
-        LOG_D("close outbound");
-
-        if (ch->stage != SOCKS5_FINISH)
-        {
-            s_socks5_close_inbound(socks5, ch);
-            LOG_D("close inbound");
-        }
         return;
     }
     else
@@ -602,7 +597,6 @@ static void s_socks5_outbound_stage_init_r(nt_proxy_socks5_t* socks5, socks5_cha
         memmove(ch->dbuf, ch->dbuf + 2, ch->dbuf_sz);
     }
 
-    LOG_D("server response method=%u.", method);
     switch (method)
     {
     case 0x00: /* NO AUTHENTICATION REQUIRED */
@@ -613,6 +607,7 @@ static void s_socks5_outbound_stage_init_r(nt_proxy_socks5_t* socks5, socks5_cha
         break;
     case 0xff: /* NO ACCEPTABLE METHODS */
     default:   /* Unsupport methods */
+        LOG_D("[CHID=%d] Unsupport method=%u", ch->chid, method);
         s_socks5_close_inbound_outbound(socks5, ch);
         break;
     }
@@ -652,8 +647,8 @@ static int s_socks5_outbound_stage_connect_r(nt_proxy_socks5_t* socks5, socks5_c
     /* Check protocol and CONNECT result. */
     if (ch->dbuf[0] != 0x05 || ch->dbuf[1] != 0x00)
     {
+        LOG_I("[CHID=%d] Socks5 server refuse connect. Close inbound / outbound.", ch->chid);
         s_socks5_close_inbound_outbound(socks5, ch);
-        LOG_I("socks5 server refuse connect.");
         return NT_ERR(EPIPE);
     }
 
@@ -676,8 +671,8 @@ static int s_socks5_outbound_stage_connect_r(nt_proxy_socks5_t* socks5, socks5_c
     }
     else
     {
+        LOG_W("[CHID=%d] Unknown ATYP=%d. Close inbound / outbound.", ch->chid, ch->dbuf[3]);
         s_socks5_close_inbound_outbound(socks5, ch);
-        LOG_W("Unknown ATYP=%d.", ch->dbuf[3]);
         return NT_ERR(EINVAL);
     }
 
@@ -745,6 +740,8 @@ static int s_socks5_outbound_stage_udp_r(nt_proxy_socks5_t* socks5, socks5_chann
     /* Connect to UDP relay server. */
     if ((ret = nt_socket_connect(SOCK_DGRAM, &ch->bindaddr, 1)) < 0)
     {
+        LOG_W("[CHID=%d] Connect to UDP relay server failed: (%d) %s", ch->chid, ret,
+              NT_STRERROR(ret));
         s_socks5_close_inbound_outbound(socks5, ch);
         return ret;
     }
@@ -755,7 +752,6 @@ static int s_socks5_outbound_stage_udp_r(nt_proxy_socks5_t* socks5, socks5_chann
     s_socks5_inbound_switch_read(socks5, ch);
     s_socks5_outbound_switch_read(socks5, ch);
 
-    LOG_D("udp chid=%d build success.", ch->chid);
     return 0;
 }
 
@@ -767,17 +763,18 @@ static void s_socks5_outbound_tcp_r(nt_proxy_socks5_t* socks5, socks5_channel_t*
     ssize_t  read_sz = nt_read(ch->outbound.event.data.fd, buf, bufsz);
     if (read_sz < 0)
     {
-        ret = errno;
-        if (ret != EAGAIN && ret != EWOULDBLOCK)
+        ret = read_sz;
+        if (ret != NT_ERR(EAGAIN) && ret != NT_ERR(EWOULDBLOCK))
         {
+            LOG_D("[CHID=%d] read() failed: (%d) %s. Close outbound.", ch->chid, ret,
+                  NT_STRERROR(ret));
             s_socks5_close_outbound(socks5, ch);
-            LOG_D("close outbound.");
         }
     }
     else if (read_sz == 0)
     {
+        LOG_D("[CHID=%d] Outbound peer close. Close outbound.", ch->chid);
         s_socks5_close_outbound(socks5, ch);
-        LOG_D("close outbound.");
     }
     else
     {
@@ -848,11 +845,12 @@ static void s_socks5_inbound_udp_r(nt_proxy_socks5_t* socks5, socks5_channel_t* 
     }
     ch->ubuf_sz += recv_sz;
 
-    NT_DUMP(ch->ubuf, ch->ubuf_sz);
-
     /* Send to socks5 UDP relay server. */
-    if (nt_write(ch->outbound.event.data.fd, ch->ubuf, ch->ubuf_sz) < 0)
+    ssize_t write_sz = nt_write(ch->outbound.event.data.fd, ch->ubuf, ch->ubuf_sz);
+    if (write_sz < 0)
     {
+        LOG_D("[CHID=%d] write() failed: (%d) %s. Close inbound and outbound.", ch->chid, write_sz,
+              NT_STRERROR(write_sz));
         s_socks5_close_inbound_outbound(socks5, ch);
         return;
     }
@@ -861,8 +859,6 @@ static void s_socks5_inbound_udp_r(nt_proxy_socks5_t* socks5, socks5_channel_t* 
 static void s_socks5_outbound_udp_r(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
 {
     ssize_t read_sz = nt_read(ch->outbound.event.data.fd, ch->dbuf, sizeof(ch->dbuf));
-    LOG_D("udp outbound read");
-
     if (read_sz < 0)
     {
         LOG_E("read() failed: (%d) %s.", errno, strerror(errno));
@@ -914,8 +910,8 @@ static void s_socks5_handle_common(nt_proxy_socks5_t* socks5, socks5_channel_t* 
 {
     if (ch->stage != SOCKS5_FINISH && (event->events & (EPOLLRDHUP | EPOLLERR)))
     {
+        LOG_I("[CHID=%d] Connect to socks5 server failed. Release channel.", ch->chid);
         s_socks5_channel_remove_and_release(socks5, ch);
-        LOG_I("Connect to socks5 server failed.");
         return;
     }
 
@@ -962,17 +958,29 @@ static void s_socks5_handle_common(nt_proxy_socks5_t* socks5, socks5_channel_t* 
         }
     }
 
-    if (ch->inbound.event.data.fd < 0 && ch->ubuf_sz == 0)
-    { /* If inbound is closed and nothing to upload, close outbound too. */
-        s_socks5_close_outbound(socks5, ch);
+    if (ch->stage != SOCKS5_FINISH &&
+        (ch->inbound.event.data.fd < 0 || ch->outbound.event.data.fd < 0))
+    { /* If handshake not finished but either bound is closed, close other bound. */
+        LOG_D("[CHID=%d] Handshake not finish but inbound or outbound is closed.", ch->chid);
+        s_socks5_close_inbound_outbound(socks5, ch);
     }
-    if (ch->outbound.event.data.fd < 0 && ch->dbuf_sz == 0)
-    { /* If outbound is closed and nothing to download, close the inbound too. */
-        LOG_D("Outbound is closed, noting to download.");
-        s_socks5_close_inbound(socks5, ch);
+    else
+    {
+        if (ch->inbound.event.data.fd < 0 && ch->ubuf_sz == 0)
+        { /* If inbound is closed and nothing to upload, close outbound too. */
+            LOG_D("[CHID=%d] Inbound already closed, nothing to upload. Close outbound.", ch->chid);
+            s_socks5_close_outbound(socks5, ch);
+        }
+        if (ch->outbound.event.data.fd < 0 && ch->dbuf_sz == 0)
+        { /* If outbound is closed and nothing to download, close the inbound too. */
+            LOG_D("[CHID=%d] Outbound already closed, nothing to download. Close inbound.",
+                  ch->chid);
+            s_socks5_close_inbound(socks5, ch);
+        }
     }
     if (ch->inbound.event.data.fd < 0 && ch->outbound.event.data.fd < 0)
     {
+        LOG_D("[CHID=%d] Both inbound and outbound are closed. Release channel.", ch->chid);
         s_socks5_channel_remove_and_release(socks5, ch);
     }
 }
@@ -1023,7 +1031,7 @@ static void s_socks5_handle_release_channel(nt_proxy_socks5_t* socks5, int chid)
     }
 
     socks5_channel_t* ch = container_of(it, socks5_channel_t, node);
-    LOG_D("chid=%d release, close inbound.", chid);
+    LOG_D("[CHID=%d] Release channel, close inbound first.", chid);
     s_socks5_close_inbound(socks5, ch);
 }
 
@@ -1205,6 +1213,7 @@ static int s_socks5_channel_create(struct nt_proxy* thiz, int type, const struct
                                 : s_socks5_channel_udp_make(socks5, ch);
     if (ret < 0)
     {
+        LOG_D("Make channel failed: (%d) %s.", ret, NT_STRERROR(ret));
         nt_free(ch);
         return ret;
     }
@@ -1225,6 +1234,7 @@ static int s_socks5_channel_create(struct nt_proxy* thiz, int type, const struct
     }
     pthread_mutex_unlock(&socks5->actq_mutex);
 
+    LOG_D("[CHID=%d] Create %s channel.", ch->chid, nt_socktype_name(type));
     s_socks5_weakup(socks5);
     return ret;
 }
@@ -1243,7 +1253,6 @@ static void s_socks5_channel_release(struct nt_proxy* thiz, int channel)
     socks5_action_t*   act = nt_malloc(sizeof(socks5_action_t));
     act->type = SOCKS5_ACTION_RELEASE_CHANNEL;
     act->u.chid = channel;
-    LOG_D("Want close chid=%d", channel);
 
     pthread_mutex_lock(&socks5->actq_mutex);
     ev_list_push_back(&socks5->actq, &act->node);

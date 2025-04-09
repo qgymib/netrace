@@ -68,10 +68,8 @@ static void s_trace_setup(prog_node_t* info)
     /* Ask to trace fork() family, so we can keep eye on grandchild. */
     long trace_option =
         PTRACE_O_TRACECLONE | PTRACE_O_TRACEEXEC | PTRACE_O_TRACEFORK | PTRACE_O_TRACEVFORK;
-    /* clang-format off */
-    NT_ASSERT(ptrace(PTRACE_SETOPTIONS, info->pid, 0, trace_option) == 0,
-        "(%d) %s", errno, strerror(errno));
-    /* clang-format on */
+    long ptrace_ret = ptrace(PTRACE_SETOPTIONS, info->pid, 0, trace_option);
+    NT_ASSERT(ptrace_ret == 0, "ptrace failed: (%d) %s", errno, strerror(errno));
 }
 
 static prog_node_t* s_find_proc(pid_t pid)
@@ -100,7 +98,7 @@ static void s_check_child_exit_reason(int prog_pipe[2])
     }
 
     /* There are error from pipe. */
-    NT_ASSERT(read_sz == 0, "Pipe error: (%d) %s.", errno, strerror(errno));
+    NT_ASSERT(read_sz == 0, "Pipe error: (%d) %s.", (int)read_sz, NT_STRERROR(read_sz));
 
     /* Pipe closed, child exec() success. */
 }
@@ -192,7 +190,7 @@ static void s_trace_syscall_connect_enter(prog_node_t* prog)
     struct sockaddr_storage proxyaddr;
     if (sock->type == SOCK_DGRAM && peer_port == 53 && G->dns != NULL)
     {
-        LOG_I("Redirect dns://%s:%d", peer_ip, peer_port);
+        LOG_I("Proxy dns://%s:%d", peer_ip, peer_port);
         nt_dns_proxy_local_addr(G->dns, &proxyaddr);
         goto REWRITE_ADDRESS;
     }
