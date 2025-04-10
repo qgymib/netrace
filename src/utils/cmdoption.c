@@ -41,7 +41,7 @@ typedef struct log_level_pair
 
 /* clang-format off */
 static const char* s_help =
-CMAKE_PROJECT_NAME " - Trace and redirect network traffic (" CMAKE_PROJECT_VERSION ")\n"
+CMAKE_PROJECT_NAME " - Trace and redirect network traffic (" NT_VERSION ")\n"
 "Usage: " CMAKE_PROJECT_NAME " [options] prog [prog-args]\n"
 "Options:\n"
 "  --proxy=socks5://[user[:pass]@][host[:port]]\n"

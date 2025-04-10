@@ -1,13 +1,13 @@
 cmake_minimum_required(VERSION 3.5)
-project(netrace
-    VERSION 0.0.1
-)
+project(netrace)
 
 option(NT_ENABLE_ASAN "Enable AddressSanitizer" OFF)
 if (NT_ENABLE_ASAN)
     add_compile_options(-fsanitize=address)
     add_link_options(-fsanitize=address)
 endif()
+
+set(NT_VERSION "unknown" CACHE STRING "Project version string")
 
 ###############################################################################
 # Support functions
@@ -50,7 +50,7 @@ target_include_directories(lib${PROJECT_NAME}
 target_compile_options(lib${PROJECT_NAME}
     PUBLIC
         -DCMAKE_PROJECT_NAME="${CMAKE_PROJECT_NAME}"
-        -DCMAKE_PROJECT_VERSION="${CMAKE_PROJECT_VERSION}"
+        -DNT_VERSION="${NT_VERSION}"
 )
 
 add_executable(${PROJECT_NAME}
