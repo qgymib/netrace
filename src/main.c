@@ -272,7 +272,7 @@ static void s_trace_syscall(prog_node_t* info)
         int syscall = nt_get_syscall_id(info->pid);
         if (syscall != info->syscall)
         {
-            LOG_I("syscall mismatch: pid=%d old=%d new=%d.", info->pid, info->syscall, syscall);
+            LOG_D("syscall mismatch: pid=%d old=%d new=%d.", info->pid, info->syscall, syscall);
             info->syscall = syscall;
             goto SYSCALL_ENTER;
         }
@@ -403,6 +403,7 @@ int main(int argc, char* argv[])
     /* Parser command line arguments. */
     nt_cmd_opt_t options;
     nt_cmd_opt_parse(&options, argc, argv);
+    nt_log_set_level(options.log_level);
 
     /* Setup pipe between parent and child, to see if there are any error before
      * executing program. */

@@ -33,6 +33,12 @@
         continue;                                                                                  \
     } while (0)
 
+typedef struct log_level_pair
+{
+    const char*    str;
+    nt_log_level_t level;
+} log_level_pair;
+
 /* clang-format off */
 static const char* s_help =
 CMAKE_PROJECT_NAME " - Trace and redirect network traffic (" CMAKE_PROJECT_VERSION ")\n"
@@ -82,12 +88,15 @@ CMAKE_PROJECT_NAME " - Trace and redirect network traffic (" CMAKE_PROJECT_VERSI
 "            In addition to the default rules, ignore all IPv4 UDP transmissions,\n"
 "            ignore all IPv6 UDP transmissions whose destination port is 53.\n"
 "\n"
+"  --loglevel=[debug|info|warn|error]\n"
+"      Set log level, case insensitive. By default set to `info`.\n"
+"\n"
 "  -h, --help\n"
 "      Show this help and exit.\n"
 ;
 /* clang-format on */
 
-static void s_setup_cmdline_append_prog_args(nt_cmd_opt_t* opt,const char* arg)
+static void s_setup_cmdline_append_prog_args(nt_cmd_opt_t* opt, const char* arg)
 {
     /* The first argument. */
     if (opt->prog_args == NULL)
@@ -109,9 +118,37 @@ static void s_setup_cmdline_append_prog_args(nt_cmd_opt_t* opt,const char* arg)
     opt->prog_args[prog_nargs + 1] = NULL;
 }
 
+static nt_log_level_t s_cmd_opt_parse_loglevel(const char* level)
+{
+    static log_level_pair s_level[] = {
+        { "debug", NT_LOG_DEBUG },
+        { "info",  NT_LOG_INFO  },
+        { "warn",  NT_LOG_WARN  },
+        { "error", NT_LOG_ERROR },
+    };
+
+    if (level == NULL)
+    {
+        return NT_LOG_INFO;
+    }
+
+    size_t i;
+    for (i = 0; i < ARRAY_SIZE(s_level); i++)
+    {
+        if (strcasecmp(s_level[i].str, level) == 0)
+        {
+            return s_level[i].level;
+        }
+    }
+
+    fprintf(stderr, "Unknown log level '%s'\n.", level);
+    exit(EXIT_FAILURE);
+}
+
 void nt_cmd_opt_parse(nt_cmd_opt_t* opt, int argc, char** argv)
 {
-    int i, flag_prog_args=0;
+    int         i, flag_prog_args = 0;
+    const char* log_level = NULL;
     memset(opt, 0, sizeof(*opt));
 
     for (i = 1; i < argc; i++)
@@ -138,6 +175,7 @@ void nt_cmd_opt_parse(nt_cmd_opt_t* opt, int argc, char** argv)
         NT_CMD_PARSE_OPTION(opt->opt_proxy, "--proxy");
         NT_CMD_PARSE_OPTION(opt->opt_bypass, "--bypass");
         NT_CMD_PARSE_OPTION(opt->opt_dns, "--dns");
+        NT_CMD_PARSE_OPTION(log_level, "--loglevel");
     }
 
     if (opt->prog_args == NULL)
@@ -153,6 +191,7 @@ void nt_cmd_opt_parse(nt_cmd_opt_t* opt, int argc, char** argv)
     {
         opt->opt_bypass = "default";
     }
+    opt->log_level = s_cmd_opt_parse_loglevel(log_level);
 }
 
 void nt_cmd_opt_free(nt_cmd_opt_t* opt)

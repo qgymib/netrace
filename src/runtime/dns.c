@@ -123,7 +123,7 @@ static int s_dns_handle_client(nt_dns_proxy_t* proxy)
     ev_map_node_t* it = ev_map_find(&proxy->in_table, &tmp.node);
     if (it == NULL)
     {
-        LOG_W("Ignore DNS response ID=%u", msg->header.id);
+        LOG_D("Ignore DNS response ID=%u", msg->header.id);
         goto FIN;
     }
     dns_in_record* rec = container_of(it, dns_in_record, node);

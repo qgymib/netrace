@@ -4,7 +4,8 @@
 #include <sys/time.h>
 #include "log.h"
 
-static const char* s_log_str[] = { "T", "D", "I", "W", "E", "F" };
+static const char*    s_log_str[] = { "D", "I", "W", "E" };
+static nt_log_level_t s_log_level = NT_LOG_INFO;
 
 static char _ev_ascii_to_char(unsigned char c)
 {
@@ -37,6 +38,12 @@ const char* nt_basename(const char* path)
 void nt_log(nt_log_level_t level, const char* file, const char* func, int line, const char* fmt,
             ...)
 {
+    (void)func;
+    if (level < s_log_level)
+    {
+        return;
+    }
+
     struct timeval cur_time;
     gettimeofday(&cur_time, NULL);
 
@@ -47,8 +54,8 @@ void nt_log(nt_log_level_t level, const char* file, const char* func, int line, 
     strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", &t);
 
     file = nt_basename(file);
-    fprintf(stdout, "[%s.%03d][%s][%s:%d][%s] ", time_buf, (int)(cur_time.tv_usec / 1000),
-            s_log_str[level], file, line, func);
+    fprintf(stdout, "[%s.%03d][%s][%s:%d] ", time_buf, (int)(cur_time.tv_usec / 1000),
+            s_log_str[level], file, line);
 
     va_list ap;
     va_start(ap, fmt);
@@ -88,4 +95,9 @@ void nt_dump(const void* data, size_t size, size_t width)
         }
         fprintf(stdout, "\n");
     }
+}
+
+void nt_log_set_level(nt_log_level_t level)
+{
+    s_log_level = level;
 }

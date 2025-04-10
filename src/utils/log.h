@@ -42,18 +42,45 @@ extern "C" {
 
 typedef enum nt_log_level
 {
-    NT_LOG_TRACE,
-    NT_LOG_DEBUG,
-    NT_LOG_INFO,
-    NT_LOG_WARN,
-    NT_LOG_ERROR,
-    NT_LOG_FATAL,
+    NT_LOG_DEBUG = 0,
+    NT_LOG_INFO = 1,
+    NT_LOG_WARN = 2,
+    NT_LOG_ERROR = 3,
 } nt_log_level_t;
 
+/**
+ * @brief Logging function.
+ * @note Use LOG_*() macros.
+ * @param[in] level Log level.
+ * @param[in] file  Source code file.
+ * @param[in] func  Source code function.
+ * @param[in] line  Source code line.
+ * @param[in] fmt   Format string.
+ * @param[in] ...   Format arguments.
+ */
 void nt_log(nt_log_level_t level, const char* file, const char* func, int line, const char* fmt,
             ...);
+
+/**
+ * @brief Dump hex.
+ * @param[in] data  Data address.
+ * @param[in] size  Data size.
+ * @param[in] width Print width. 8 or 16 is fine.
+ */
 void nt_dump(const void* data, size_t size, size_t width);
+
+/**
+ * @brief Get file basename.
+ * @param[in] path File path.
+ * @return Base name.
+ */
 const char* nt_basename(const char* path);
+
+/**
+ * @brief Set log level.
+ * @param[in] level Log level.
+ */
+void nt_log_set_level(nt_log_level_t level);
 
 #ifdef __cplusplus
 }
