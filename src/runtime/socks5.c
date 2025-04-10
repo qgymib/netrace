@@ -320,6 +320,90 @@ ERR_INVAL:
     return NT_ERR(EINVAL);
 }
 
+static void s_socks5_outbound_switch_read(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
+{
+    int op = ch->outbound.event.events == 0 ? EPOLL_CTL_ADD : EPOLL_CTL_MOD;
+    ch->outbound.event.events = EPOLLIN;
+    epoll_ctl(socks5->epollfd, op, ch->outbound.event.data.fd, &ch->outbound.event);
+}
+
+static void s_socks5_outbound_switch_write(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
+{
+    int op = ch->outbound.event.events == 0 ? EPOLL_CTL_ADD : EPOLL_CTL_MOD;
+    ch->outbound.event.events = EPOLLOUT;
+    epoll_ctl(socks5->epollfd, op, ch->outbound.event.data.fd, &ch->outbound.event);
+}
+
+static void s_socks5_outbound_want_write(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
+{
+    if (!(ch->outbound.event.events & EPOLLOUT) && ch->outbound.event.data.fd >= 0)
+    {
+        int op = ch->outbound.event.events == 0 ? EPOLL_CTL_ADD : EPOLL_CTL_MOD;
+        ch->outbound.event.events |= EPOLLOUT;
+        epoll_ctl(socks5->epollfd, op, ch->outbound.event.data.fd, &ch->outbound.event);
+    }
+}
+
+static void s_socks5_outbound_want_read(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
+{
+    if (!(ch->outbound.event.events & EPOLLIN) && ch->outbound.event.data.fd >= 0)
+    {
+        int op = ch->outbound.event.events == 0 ? EPOLL_CTL_ADD : EPOLL_CTL_MOD;
+        ch->outbound.event.events |= EPOLLIN;
+        epoll_ctl(socks5->epollfd, op, ch->outbound.event.data.fd, &ch->outbound.event);
+    }
+}
+
+static void s_socks5_outbound_stop_read(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
+{
+    if ((ch->outbound.event.events & EPOLLIN) && ch->outbound.event.data.fd >= 0)
+    {
+        ch->outbound.event.events &= ~EPOLLIN;
+        int op = ch->outbound.event.events == 0 ? EPOLL_CTL_DEL : EPOLL_CTL_MOD;
+        epoll_ctl(socks5->epollfd, op, ch->outbound.event.data.fd, &ch->outbound.event);
+    }
+}
+
+static void s_socks5_inbound_want_write(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
+{
+    if (!(ch->inbound.event.events & EPOLLOUT) && ch->inbound.event.data.fd >= 0)
+    {
+        int op = ch->inbound.event.events == 0 ? EPOLL_CTL_ADD : EPOLL_CTL_MOD;
+        ch->inbound.event.events |= EPOLLOUT;
+        epoll_ctl(socks5->epollfd, op, ch->inbound.event.data.fd, &ch->inbound.event);
+    }
+}
+
+static void s_socks5_inbound_want_read(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
+{
+    if (!(ch->inbound.event.events & EPOLLIN) && ch->inbound.event.data.fd >= 0)
+    {
+        int op = ch->inbound.event.events == 0 ? EPOLL_CTL_ADD : EPOLL_CTL_MOD;
+        ch->inbound.event.events |= EPOLLIN;
+        epoll_ctl(socks5->epollfd, op, ch->inbound.event.data.fd, &ch->inbound.event);
+    }
+}
+
+static void s_socks5_inbound_stop_write(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
+{
+    if ((ch->inbound.event.events & EPOLLOUT) && ch->inbound.event.data.fd >= 0)
+    {
+        ch->inbound.event.events &= ~EPOLLOUT;
+        int op = ch->inbound.event.events == 0 ? EPOLL_CTL_DEL : EPOLL_CTL_MOD;
+        epoll_ctl(socks5->epollfd, op, ch->inbound.event.data.fd, &ch->inbound.event);
+    }
+}
+
+static void s_socks5_inbound_stop_read(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
+{
+    if ((ch->inbound.event.events & EPOLLIN) && ch->inbound.event.data.fd >= 0)
+    {
+        ch->inbound.event.events &= ~EPOLLIN;
+        int op = ch->inbound.event.events == 0 ? EPOLL_CTL_DEL : EPOLL_CTL_MOD;
+        epoll_ctl(socks5->epollfd, op, ch->inbound.event.data.fd, &ch->inbound.event);
+    }
+}
+
 static void s_socks5_inbound_tcp_w(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
 {
     ssize_t write_sz = nt_write(ch->inbound.event.data.fd, ch->dbuf, ch->dbuf_sz);
@@ -335,6 +419,10 @@ static void s_socks5_inbound_tcp_w(nt_proxy_socks5_t* socks5, socks5_channel_t* 
         ch->dbuf_sz -= write_sz;
     }
 
+    if (ch->dbuf_sz < sizeof(ch->dbuf))
+    {
+        s_socks5_outbound_want_read(socks5, ch);
+    }
     if (ch->dbuf_sz > 0)
     {
         memmove(ch->dbuf, ch->dbuf + write_sz, ch->dbuf_sz);
@@ -342,18 +430,7 @@ static void s_socks5_inbound_tcp_w(nt_proxy_socks5_t* socks5, socks5_channel_t* 
     }
 
     /* dbuf is empty, stop write. */
-    ch->inbound.event.events &= ~EPOLLOUT;
-    int op = ch->inbound.event.events == 0 ? EPOLL_CTL_DEL : EPOLL_CTL_MOD;
-    epoll_ctl(socks5->epollfd, op, ch->inbound.event.data.fd, &ch->inbound.event);
-
-    /* read from outbound. */
-    if (ch->stage == SOCKS5_FINISH && ch->outbound.event.data.fd >= 0 &&
-        !(ch->outbound.event.events & EPOLLIN))
-    {
-        int op = ch->outbound.event.events == 0 ? EPOLL_CTL_ADD : EPOLL_CTL_MOD;
-        ch->outbound.event.events |= EPOLLIN;
-        epoll_ctl(socks5->epollfd, op, ch->outbound.event.data.fd, &ch->outbound.event);
-    }
+    s_socks5_inbound_stop_write(socks5, ch);
 }
 
 static void s_socks5_inbound_accept(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
@@ -406,13 +483,15 @@ static void s_socks5_inbound_read(nt_proxy_socks5_t* socks5, socks5_channel_t* c
         ch->ubuf_sz += read_sz;
     }
 
-    /* Write to outbound. */
-    if (ch->stage == SOCKS5_FINISH && ch->outbound.event.data.fd >= 0 &&
-        !(ch->outbound.event.events & EPOLLOUT))
+    if (ch->ubuf_sz == sizeof(ch->ubuf))
     {
-        int op = ch->outbound.event.events == 0 ? EPOLL_CTL_ADD : EPOLL_CTL_MOD;
-        ch->outbound.event.events |= EPOLLOUT;
-        epoll_ctl(socks5->epollfd, op, ch->outbound.event.data.fd, &ch->outbound.event);
+        s_socks5_inbound_stop_read(socks5, ch);
+    }
+
+    /* Write to outbound. */
+    if (ch->stage == SOCKS5_FINISH)
+    {
+        s_socks5_outbound_want_write(socks5, ch);
     }
 }
 
@@ -428,21 +507,16 @@ static void s_socks5_inbound_tcp_r(nt_proxy_socks5_t* socks5, socks5_channel_t* 
     s_socks5_inbound_read(socks5, ch);
 }
 
-static void s_socks5_outbound_switch_read(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
+static void s_socks5_outbound_stage_tcp_finish_w(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
 {
-    int op = ch->outbound.event.events == 0 ? EPOLL_CTL_ADD : EPOLL_CTL_MOD;
-    ch->outbound.event.events = EPOLLIN;
-    epoll_ctl(socks5->epollfd, op, ch->outbound.event.data.fd, &ch->outbound.event);
-}
+    if (ch->ubuf_sz < sizeof(ch->ubuf))
+    { /* Inbound can start read. */
+        s_socks5_inbound_want_read(socks5, ch);
+    }
 
-static void s_socks5_outbound_stage_finish_w(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
-{
-    if (ch->ubuf_sz < sizeof(ch->ubuf) && ch->inbound.event.data.fd >= 0 &&
-        !(ch->inbound.event.events & EPOLLIN))
-    {
-        int op = ch->inbound.event.events == 0 ? EPOLL_CTL_ADD : EPOLL_CTL_MOD;
-        ch->inbound.event.events |= EPOLLIN;
-        epoll_ctl(socks5->epollfd, op, ch->inbound.event.data.fd, &ch->inbound.event);
+    if (ch->ubuf_sz != 0)
+    { /* Outbound should write data. */
+        s_socks5_outbound_want_write(socks5, ch);
     }
 }
 
@@ -456,19 +530,11 @@ static void s_socks5_outbound_tcp_w(nt_proxy_socks5_t* socks5, socks5_channel_t*
         s_socks5_close_outbound(socks5, ch);
         return;
     }
-    else
-    {
-        ch->ubuf_sz -= write_sz;
-    }
+    ch->ubuf_sz -= write_sz;
 
     if (ch->ubuf_sz > 0)
     {
         memmove(ch->ubuf, ch->ubuf + write_sz, ch->ubuf_sz);
-        if (ch->stage == SOCKS5_FINISH)
-        {
-            s_socks5_outbound_stage_finish_w(socks5, ch);
-        }
-        return;
     }
 
     switch (ch->stage)
@@ -477,48 +543,43 @@ static void s_socks5_outbound_tcp_w(nt_proxy_socks5_t* socks5, socks5_channel_t*
     case SOCKS5_AUTH:
     case SOCKS5_CONNECT:
     case SOCKS5_UDP:
-        s_socks5_outbound_switch_read(socks5, ch);
+        if (ch->ubuf_sz == 0)
+        { /* Wait for response. */
+            s_socks5_outbound_switch_read(socks5, ch);
+        }
         break;
     case SOCKS5_FINISH:
-        s_socks5_outbound_stage_finish_w(socks5, ch);
+        s_socks5_outbound_stage_tcp_finish_w(socks5, ch);
         break;
     }
 }
 
-static void s_socks5_outbound_switch_write(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
-{
-    int op = ch->outbound.event.events == 0 ? EPOLL_CTL_ADD : EPOLL_CTL_MOD;
-    ch->outbound.event.events = EPOLLOUT;
-    epoll_ctl(socks5->epollfd, op, ch->outbound.event.data.fd, &ch->outbound.event);
-}
-
-static void s_socks5_setup_connect(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
+static void s_socks5_setup_tcp_connect(socks5_channel_t* ch)
 {
     /* Change stage mark. */
     ch->stage = SOCKS5_CONNECT;
 
-    /* Register for write. */
-    s_socks5_outbound_switch_write(socks5, ch);
-
     /* Construct CONNECT request. */
-    ch->ubuf[0] = 0x05; // socks5
-    ch->ubuf[1] = 0x01; // CONNECT
-    ch->ubuf[2] = 0x00; // RESERVED
+    ch->ubuf[ch->ubuf_sz++] = 0x05; // socks5
+    ch->ubuf[ch->ubuf_sz++] = 0x01; // CONNECT
+    ch->ubuf[ch->ubuf_sz++] = 0x00; // RESERVED
     if (ch->peeraddr.ss_family == AF_INET)
     {
         struct sockaddr_in* addr = (struct sockaddr_in*)&ch->peeraddr;
-        memcpy(&ch->ubuf[4], &addr->sin_addr, 4);
-        memcpy(&ch->ubuf[8], &addr->sin_port, 2);
-        ch->ubuf[3] = 0x01; // ATYP=IPv4
-        ch->ubuf_sz = 10;
+        ch->ubuf[ch->ubuf_sz++] = 0x01; // ATYP=IPv4
+        memcpy(&ch->ubuf[ch->ubuf_sz], &addr->sin_addr, 4);
+        ch->ubuf_sz += 4;
+        memcpy(&ch->ubuf[ch->ubuf_sz], &addr->sin_port, 2);
+        ch->ubuf_sz += 2;
     }
     else if (ch->peeraddr.ss_family == AF_INET6)
     {
         struct sockaddr_in6* addr = (struct sockaddr_in6*)&ch->peeraddr;
-        memcpy(&ch->ubuf[4], &addr->sin6_addr, 16);
-        memcpy(&ch->ubuf[20], &addr->sin6_port, 2);
-        ch->ubuf[3] = 0x04; // ATYP=IPv6
-        ch->ubuf_sz = 22;
+        ch->ubuf[ch->ubuf_sz] = 0x04; // ATYP=IPv6
+        memcpy(&ch->ubuf[ch->ubuf_sz], &addr->sin6_addr, 16);
+        ch->ubuf_sz += 16;
+        memcpy(&ch->ubuf[ch->ubuf_sz], &addr->sin6_port, 2);
+        ch->ubuf_sz += 2;
     }
 }
 
@@ -543,31 +604,30 @@ static void s_socks5_setup_auth(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
     ch->ubuf_sz += socks5->server_password_sz;
 }
 
-static void s_socks5_setup_udp(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
+static void s_socks5_setup_udp_associate(socks5_channel_t* ch)
 {
     ch->stage = SOCKS5_UDP;
 
-    /* Register for write. */
-    s_socks5_outbound_switch_write(socks5, ch);
-
-    ch->ubuf[0] = 0x05; // socks5
-    ch->ubuf[1] = 0x03; // UDP ASSOCIATE
-    ch->ubuf[2] = 0x00; // RSV
+    ch->ubuf[ch->ubuf_sz++] = 0x05; // socks5
+    ch->ubuf[ch->ubuf_sz++] = 0x03; // UDP ASSOCIATE
+    ch->ubuf[ch->ubuf_sz++] = 0x00; // RSV
     if (ch->peeraddr.ss_family == AF_INET)
     {
         struct sockaddr_in* addr = (struct sockaddr_in*)&ch->peeraddr;
-        ch->ubuf[3] = 0x01; // ATYP=IPv4
-        memcpy(&ch->ubuf[4], &addr->sin_addr, 4);
-        memcpy(&ch->ubuf[8], &addr->sin_port, 2);
-        ch->ubuf_sz = 10;
+        ch->ubuf[ch->ubuf_sz++] = 0x01; // ATYP=IPv4
+        memcpy(&ch->ubuf[ch->ubuf_sz], &addr->sin_addr, 4);
+        ch->ubuf_sz += 4;
+        memcpy(&ch->ubuf[ch->ubuf_sz], &addr->sin_port, 2);
+        ch->ubuf_sz += 2;
     }
     else
     {
         struct sockaddr_in6* addr = (struct sockaddr_in6*)&ch->peeraddr;
-        ch->ubuf[3] = 0x04; // ATYP=IPv6
-        memcpy(&ch->ubuf[4], &addr->sin6_addr, 16);
-        memcpy(&ch->ubuf[20], &addr->sin6_port, 2);
-        ch->ubuf_sz = 22;
+        ch->ubuf[ch->ubuf_sz++] = 0x04; // ATYP=IPv6
+        memcpy(&ch->ubuf[ch->ubuf_sz], &addr->sin6_addr, 16);
+        ch->ubuf_sz += 16;
+        memcpy(&ch->ubuf[ch->ubuf_sz], &addr->sin6_port, 2);
+        ch->ubuf_sz += 2;
     }
 }
 
@@ -575,18 +635,25 @@ static void s_socks5_setup_request(nt_proxy_socks5_t* socks5, socks5_channel_t* 
 {
     if (ch->type == SOCK_STREAM)
     {
-        s_socks5_setup_connect(socks5, ch);
+        s_socks5_setup_tcp_connect(ch);
     }
     else
     {
-        s_socks5_setup_udp(socks5, ch);
+        s_socks5_setup_udp_associate(ch);
     }
+
+    /* Register for write. */
+    s_socks5_outbound_switch_write(socks5, ch);
 }
 
-static void s_socks5_outbound_stage_init_r(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
+/**
+ * @brief Handle response of version identifier/method selection messages.
+ */
+static void s_socks5_outbound_tcp_stage_init_r(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
 {
     if (ch->dbuf_sz < 2)
     { /* Continue read. */
+        s_socks5_outbound_want_read(socks5, ch);
         return;
     }
 
@@ -613,23 +680,41 @@ static void s_socks5_outbound_stage_init_r(nt_proxy_socks5_t* socks5, socks5_cha
     }
 }
 
-static void s_socks5_outbound_stage_auth_r(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
+/**
+ * @brief Handle response of Username/Password Authentication
+ * ```
+ * +----+--------+
+ * |VER | STATUS |
+ * +----+--------+
+ * | 1  |   1    |
+ * +----+--------+
+ * ```
+ */
+static void s_socks5_outbound_tcp_stage_auth_r(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
 {
     if (ch->dbuf_sz < 2)
     {
+        s_socks5_outbound_want_read(socks5, ch);
         return;
     }
 
-    uint8_t code = ch->dbuf[2];
+    uint8_t ver = ch->dbuf[0];
+    uint8_t code = ch->dbuf[1];
     ch->dbuf_sz -= 2;
     if (ch->dbuf_sz > 0)
     {
         memmove(ch->dbuf, ch->dbuf + 2, ch->dbuf_sz);
     }
 
+    if (ver != 0x05)
+    {
+        LOG_E("[CHID=%d] Socks5 server version verify failed: got=%u.", ch->chid, ver);
+        s_socks5_close_inbound_outbound(socks5, ch);
+        return;
+    }
     if (code != 0)
     {
-        LOG_D("socks5 auth failed: code=%u.", code);
+        LOG_D("[CHID=%d] socks5 auth failed: code=%u.", ch->chid, code);
         s_socks5_close_inbound_outbound(socks5, ch);
         return;
     }
@@ -684,6 +769,17 @@ static int s_socks5_outbound_stage_connect_r(nt_proxy_socks5_t* socks5, socks5_c
 
     /* Change stage. */
     ch->stage = SOCKS5_FINISH;
+    s_socks5_inbound_want_read(socks5, ch);
+    s_socks5_outbound_want_read(socks5, ch);
+    if (ch->ubuf_sz != 0)
+    {
+        s_socks5_outbound_want_write(socks5, ch);
+    }
+    if (ch->dbuf_sz != 0)
+    {
+        s_socks5_inbound_want_write(socks5, ch);
+    }
+
     return 0;
 }
 
@@ -692,9 +788,7 @@ static void s_socks5_outbound_stage_finish_r(nt_proxy_socks5_t* socks5, socks5_c
     /* If buffer is full, stop read. */
     if (ch->dbuf_sz == sizeof(ch->dbuf))
     {
-        ch->outbound.event.events &= ~EPOLLOUT;
-        int op = ch->outbound.event.events == 0 ? EPOLL_CTL_DEL : EPOLL_CTL_MOD;
-        epoll_ctl(socks5->epollfd, op, ch->outbound.event.data.fd, &ch->outbound.event);
+        s_socks5_outbound_stop_read(socks5, ch);
     }
 
     /* If inbound still waiting for accept, do nothing. */
@@ -704,19 +798,7 @@ static void s_socks5_outbound_stage_finish_r(nt_proxy_socks5_t* socks5, socks5_c
     }
 
     /* Write to inbound. */
-    if (ch->inbound.event.data.fd >= 0 && !(ch->inbound.event.events & EPOLLOUT))
-    {
-        int op = ch->inbound.event.events == 0 ? EPOLL_CTL_ADD : EPOLL_CTL_MOD;
-        ch->inbound.event.events |= EPOLLOUT;
-        epoll_ctl(socks5->epollfd, op, ch->inbound.event.data.fd, &ch->inbound.event);
-    }
-}
-
-static void s_socks5_inbound_switch_read(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
-{
-    int op = ch->inbound.event.events == 0 ? EPOLL_CTL_ADD : EPOLL_CTL_MOD;
-    ch->inbound.event.events = EPOLLIN;
-    epoll_ctl(socks5->epollfd, op, ch->inbound.event.data.fd, &ch->inbound.event);
+    s_socks5_inbound_want_write(socks5, ch);
 }
 
 static int s_socks5_outbound_stage_udp_r(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
@@ -749,8 +831,16 @@ static int s_socks5_outbound_stage_udp_r(nt_proxy_socks5_t* socks5, socks5_chann
     NT_ASSERT(ev_map_insert(&socks5->sock_map, &ch->outbound.node) == NULL, "Conflict node");
 
     /* Now we can start reading from inbound and outbound. */
-    s_socks5_inbound_switch_read(socks5, ch);
-    s_socks5_outbound_switch_read(socks5, ch);
+    s_socks5_inbound_want_read(socks5, ch);
+    s_socks5_outbound_want_read(socks5, ch);
+    if (ch->ubuf_sz != 0)
+    {
+        s_socks5_outbound_want_write(socks5, ch);
+    }
+    if (ch->dbuf_sz != 0)
+    {
+        s_socks5_inbound_want_write(socks5, ch);
+    }
 
     return 0;
 }
@@ -770,31 +860,23 @@ static void s_socks5_outbound_tcp_r(nt_proxy_socks5_t* socks5, socks5_channel_t*
                   NT_STRERROR(ret));
             s_socks5_close_outbound(socks5, ch);
         }
+        return;
     }
-    else if (read_sz == 0)
+    if (read_sz == 0)
     {
         LOG_D("[CHID=%d] Outbound peer close. Close outbound.", ch->chid);
         s_socks5_close_outbound(socks5, ch);
-    }
-    else
-    {
-        ch->dbuf_sz += read_sz;
-    }
-
-    if (ch->outbound.event.data.fd < 0 && ch->stage != SOCKS5_FINISH)
-    {
-        s_socks5_close_inbound(socks5, ch);
-        LOG_D("close inbound.");
         return;
     }
+    ch->dbuf_sz += read_sz;
 
     switch (ch->stage)
     {
     case SOCKS5_INIT:
-        s_socks5_outbound_stage_init_r(socks5, ch);
+        s_socks5_outbound_tcp_stage_init_r(socks5, ch);
         break;
     case SOCKS5_AUTH:
-        s_socks5_outbound_stage_auth_r(socks5, ch);
+        s_socks5_outbound_tcp_stage_auth_r(socks5, ch);
         break;
     case SOCKS5_CONNECT:
         s_socks5_outbound_stage_connect_r(socks5, ch);
@@ -810,25 +892,29 @@ static void s_socks5_outbound_tcp_r(nt_proxy_socks5_t* socks5, socks5_channel_t*
 
 static void s_socks5_inbound_udp_r(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
 {
+    ch->ubuf_sz = 0;
+
     /* Build socks5 udp header. */
-    ch->ubuf[0] = 0x00; // RSV
-    ch->ubuf[1] = 0x00; // RSV
-    ch->ubuf[2] = 0x00; // FRAG
+    ch->ubuf[ch->ubuf_sz++] = 0x00; // RSV
+    ch->ubuf[ch->ubuf_sz++] = 0x00; // RSV
+    ch->ubuf[ch->ubuf_sz++] = 0x00; // FRAG
     if (ch->peeraddr.ss_family == AF_INET)
     {
         struct sockaddr_in* addr = (struct sockaddr_in*)&ch->peeraddr;
-        ch->ubuf[3] = 0x01;
-        memcpy(&ch->ubuf[4], &addr->sin_addr, 4);
-        memcpy(&ch->ubuf[8], &addr->sin_port, 2);
-        ch->ubuf_sz = 10;
+        ch->ubuf[ch->ubuf_sz++] = 0x01;
+        memcpy(&ch->ubuf[ch->ubuf_sz], &addr->sin_addr, 4);
+        ch->ubuf_sz += 4;
+        memcpy(&ch->ubuf[ch->ubuf_sz], &addr->sin_port, 2);
+        ch->ubuf_sz += 2;
     }
     else
     {
         struct sockaddr_in6* addr = (struct sockaddr_in6*)&ch->peeraddr;
-        ch->ubuf[3] = 0x04;
-        memcpy(&ch->ubuf[4], &addr->sin6_addr, 16);
-        memcpy(&ch->ubuf[20], &addr->sin6_port, 2);
-        ch->ubuf_sz = 22;
+        ch->ubuf[ch->ubuf_sz++] = 0x04;
+        memcpy(&ch->ubuf[ch->ubuf_sz], &addr->sin6_addr, 16);
+        ch->ubuf_sz += 16;
+        memcpy(&ch->ubuf[ch->ubuf_sz], &addr->sin6_port, 2);
+        ch->ubuf_sz += 2;
     }
 
     /* Append data from program. */
@@ -861,7 +947,7 @@ static void s_socks5_outbound_udp_r(nt_proxy_socks5_t* socks5, socks5_channel_t*
     ssize_t read_sz = nt_read(ch->outbound.event.data.fd, ch->dbuf, sizeof(ch->dbuf));
     if (read_sz < 0)
     {
-        LOG_E("read() failed: (%d) %s.", errno, strerror(errno));
+        LOG_D("[CHID=%d] read() failed: (%d) %s.", ch->chid, read_sz, NT_STRERROR(read_sz));
         s_socks5_close_inbound_outbound(socks5, ch);
         return;
     }
@@ -871,6 +957,7 @@ static void s_socks5_outbound_udp_r(nt_proxy_socks5_t* socks5, socks5_channel_t*
     }
     if (ch->dbuf[0] != 0x00 && ch->dbuf[1] != 0x00)
     {
+        LOG_D("[CHID=%d] Invalid message. Close inbound and outbound.", ch->chid);
         s_socks5_close_inbound_outbound(socks5, ch);
         return;
     }
@@ -885,6 +972,7 @@ static void s_socks5_outbound_udp_r(nt_proxy_socks5_t* socks5, socks5_channel_t*
     }
     else
     {
+        LOG_W("[CHID=%d] Unsupport method=%u. Close inbound and outbound.", ch->chid, ch->dbuf[3]);
         s_socks5_close_inbound_outbound(socks5, ch);
         return;
     }
@@ -900,6 +988,7 @@ static void s_socks5_outbound_udp_r(nt_proxy_socks5_t* socks5, socks5_channel_t*
     socklen_t        addrlen = sizeof(ch->u.udp.inbound_addr);
     if (sendto(ch->inbound.event.data.fd, buff, buffsz, 0, addr, addrlen) < 0)
     {
+        LOG_W("[CHID=%d] sendto() failed: (%d) %s.", ch->chid, errno, strerror(errno));
         s_socks5_close_inbound_outbound(socks5, ch);
         return;
     }
@@ -997,13 +1086,10 @@ static void s_socks5_handle_create_channel(nt_proxy_socks5_t* socks5, socks5_cha
     }
     ev_map_insert(&socks5->channel_map, &ch->node);
 
-    /* For TCP inbound we need to wait for accept. */
-    if (ch->type == SOCK_STREAM)
-    {
-        s_socks5_inbound_switch_read(socks5, ch);
-    }
-
-    /* For outbound we need to do socks5 handshake. */
+    /*
+     * For inbound we wait for outbound handshake finish.
+     * For outbound we need to do socks5 handshake.
+     */
     s_socks5_outbound_switch_write(socks5, ch);
 
     /* Construct handshake request. */
@@ -1067,6 +1153,14 @@ static void s_socks5_handle_event(nt_proxy_socks5_t* socks5)
     }
 }
 
+static socks5_sock_t* s_socks5_find_sock(nt_proxy_socks5_t* socks5, int fd)
+{
+    socks5_sock_t tmp;
+    tmp.event.data.fd = fd;
+    ev_map_node_t* it = ev_map_find(&socks5->sock_map, &tmp.node);
+    return it != NULL ? container_of(it, socks5_sock_t, node) : NULL;
+}
+
 static void s_socks5_handle(nt_proxy_socks5_t* socks5, struct epoll_event* event)
 {
     if (event->data.fd == socks5->eventfd)
@@ -1074,17 +1168,17 @@ static void s_socks5_handle(nt_proxy_socks5_t* socks5, struct epoll_event* event
         uint64_t buff;
         read(socks5->eventfd, &buff, sizeof(buff));
         s_socks5_handle_event(socks5);
+        return;
     }
-    else
-    {
-        socks5_sock_t tmp;
-        tmp.event.data.fd = event->data.fd;
-        ev_map_node_t* it = ev_map_find(&socks5->sock_map, &tmp.node);
-        assert(it != NULL);
-        socks5_sock_t*    sock = container_of(it, socks5_sock_t, node);
-        socks5_channel_t* ch = sock->channel;
-        s_socks5_handle_common(socks5, ch, event);
+
+    socks5_sock_t* sock = s_socks5_find_sock(socks5, event->data.fd);
+    if (sock == NULL)
+    { /* This is because the socket maybe deleted in the other event. */
+        LOG_D("Ignore event for fd=%d.", event->data.fd);
+        return;
     }
+    socks5_channel_t* ch = sock->channel;
+    s_socks5_handle_common(socks5, ch, event);
 }
 
 static void* s_socks5_loop(void* arg)
