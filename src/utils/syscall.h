@@ -12,7 +12,7 @@ extern "C" {
  * @brief Get syscall ID.
  * @param[in] pid   Process ID.
  */
-long nt_get_syscall_id(pid_t pid);
+long nt_syscall_get_id(pid_t pid);
 
 /**
  * @brief Get syscall parameter.
@@ -20,14 +20,22 @@ long nt_get_syscall_id(pid_t pid);
  * @param[in] idx Parameter index. 0-5.
  * @return Argument value.
  */
-long nt_get_syscall_arg(pid_t pid, size_t idx);
+long nt_syscall_get_arg(pid_t pid, size_t idx);
+
+/**
+ * @brief Set syscall parameter.
+ * @param[in] pid Process ID.
+ * @param[in] idx Parameter index.
+ * @param[in] val Parameter value.
+ */
+void nt_syscall_set_arg(pid_t pid, size_t idx, long val);
 
 /**
  * @brief Get return value of syscall.
  * @param[in] pid   Process ID.
  * @return Return value.
  */
-long nt_get_syscall_ret(pid_t pid);
+long nt_syscall_get_ret(pid_t pid);
 
 /**
  * @brief Get data from program's space.

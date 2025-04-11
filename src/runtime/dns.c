@@ -9,6 +9,7 @@
 #include "utils/memory.h"
 #include "utils/socket.h"
 #include "utils/str.h"
+#include "utils/time.h"
 #include "utils/log.h"
 #include "dns.h"
 #include "config.h"
@@ -37,13 +38,6 @@ static void s_dns_release_in_record(dns_in_record* record)
     nt_free(record);
 }
 
-static uint64_t s_dns_clocktime(void)
-{
-    struct timespec t;
-    NT_ASSERT(clock_gettime(CLOCK_MONOTONIC, &t) == 0, "(%d) %s.", errno, strerror(errno));
-    return t.tv_sec * 1000 + t.tv_nsec / 1000000;
-}
-
 static int s_dns_handle_input(nt_dns_proxy_t* proxy, size_t bufsz, nt_dns_msg_t* msg,
                               const struct sockaddr_storage* peer_addr)
 {
@@ -63,7 +57,7 @@ static int s_dns_handle_input(nt_dns_proxy_t* proxy, size_t bufsz, nt_dns_msg_t*
     /* Build query record. */
     dns_in_record* rec = nt_calloc(1, sizeof(dns_in_record));
     rec->id = msg->header.id;
-    rec->start_ts = s_dns_clocktime();
+    rec->start_ts = nt_clock_gettime_ms();
     memcpy(&rec->peer_addr, peer_addr, sizeof(*peer_addr));
 
     /* Save record. */

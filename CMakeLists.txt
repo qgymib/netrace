@@ -40,6 +40,7 @@ add_library(lib${PROJECT_NAME} STATIC
     "src/utils/socket.c"
     "src/utils/str.c"
     "src/utils/syscall.c"
+    "src/utils/time.c"
     "src/utils/urlparser.c"
 )
 setup_target_wall(lib${PROJECT_NAME})

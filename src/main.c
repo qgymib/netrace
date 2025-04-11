@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <sched.h>
 #include <unistd.h>
 #include <sys/ptrace.h>
 #include <sys/wait.h>
@@ -28,7 +29,7 @@
     xx(SYS_socket,  s_trace_syscall_socket_enter,   s_trace_syscall_socket_leave)   \
     xx(SYS_close,   s_trace_syscall_close_enter,    SYSCALL_SKIP)                   \
     xx(SYS_connect, s_trace_syscall_connect_enter,  s_trace_syscall_connect_leave)  \
-    xx(SYS_clone,   SYSCALL_SKIP,                   SYSCALL_SKIP)
+    xx(SYS_clone,   s_trace_syscall_clone_enter,    SYSCALL_SKIP)
 /* clang-format on */
 
 static int do_child(const nt_cmd_opt_t* opt, int prog_pipe[2])
@@ -108,9 +109,9 @@ static void s_trace_syscall_socket_enter(prog_node_t* prog)
     sock_node_t* sock = nt_calloc(1, sizeof(sock_node_t));
     sock->fd = -1;
     sock->channel = -1;
-    sock->domain = nt_get_syscall_arg(prog->pid, 0);
-    sock->type = nt_get_syscall_arg(prog->pid, 1) & 0xFF;
-    sock->protocol = nt_get_syscall_arg(prog->pid, 2);
+    sock->domain = nt_syscall_get_arg(prog->pid, 0);
+    sock->type = nt_syscall_get_arg(prog->pid, 1) & 0xFF;
+    sock->protocol = nt_syscall_get_arg(prog->pid, 2);
 
     /* clang-format off */
     NT_ASSERT(ev_map_insert(&prog->sock_map, &sock->node) == NULL,
@@ -126,7 +127,7 @@ static void s_trace_syscall_socket_leave(prog_node_t* prog)
 
     /* Update fd. */
     ev_map_erase(&prog->sock_map, &sock->node);
-    if ((sock->fd = nt_get_syscall_ret(prog->pid)) < 0)
+    if ((sock->fd = nt_syscall_get_ret(prog->pid)) < 0)
     {
         LOG_D("pid=%d ignore socket=%d domain=%d type=%d protocol=%d.", prog->pid, sock->fd,
               sock->domain, sock->type, sock->protocol);
@@ -155,7 +156,7 @@ static sock_node_t* s_prog_search_sock(prog_node_t* prog, int fd)
 
 static void s_trace_syscall_close_enter(prog_node_t* prog)
 {
-    int          fd = nt_get_syscall_arg(prog->pid, 0);
+    int          fd = nt_syscall_get_arg(prog->pid, 0);
     sock_node_t* sock = s_prog_search_sock(prog, fd);
     if (sock == NULL)
     {
@@ -168,7 +169,7 @@ static void s_trace_syscall_close_enter(prog_node_t* prog)
 
 static void s_trace_syscall_connect_enter(prog_node_t* prog)
 {
-    int          fd = nt_get_syscall_arg(prog->pid, 0);
+    int          fd = nt_syscall_get_arg(prog->pid, 0);
     sock_node_t* sock = s_prog_search_sock(prog, fd);
     if (sock == NULL)
     {
@@ -216,9 +217,19 @@ REWRITE_ADDRESS:
     nt_syscall_set_sockaddr(prog->pid, p_sockaddr, &proxyaddr);
 }
 
+#include <sys/reg.h>
+
+static void s_trace_syscall_clone_enter(prog_node_t* prog)
+{
+    long flags = nt_syscall_get_arg(prog->pid, 0);
+    flags &= ~CLONE_UNTRACED;
+    flags |= CLONE_PTRACE;
+    nt_syscall_set_arg(prog->pid, 0, flags);
+}
+
 static void s_trace_syscall_connect_leave(prog_node_t* prog)
 {
-    long p_sockaddr = nt_get_syscall_arg(prog->pid, 1);
+    long p_sockaddr = nt_syscall_get_arg(prog->pid, 1);
 
     sock_node_t* sock = prog->sock_last;
     if (sock != NULL)
@@ -261,7 +272,7 @@ static void s_trace_syscall(prog_node_t* info)
 {
     if (!info->b_in_syscall)
     {
-        info->syscall = nt_get_syscall_id(info->pid);
+        info->syscall = nt_syscall_get_id(info->pid);
 
     SYSCALL_ENTER:
         info->b_in_syscall = 1;
@@ -269,7 +280,7 @@ static void s_trace_syscall(prog_node_t* info)
     }
     else
     {
-        int syscall = nt_get_syscall_id(info->pid);
+        int syscall = nt_syscall_get_id(info->pid);
         if (syscall != info->syscall)
         {
             LOG_D("syscall mismatch: pid=%d old=%d new=%d.", info->pid, info->syscall, syscall);

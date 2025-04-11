@@ -23,6 +23,10 @@
 #define NT_MAX(a, b)    ((a) > (b) ? (a) : (b))
 #endif
 
+#ifndef NT_MIN
+#define NT_MIN(a, b)    ((a) < (b) ? (a) : (b))
+#endif
+
 #ifndef ARRAY_SIZE
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
 #endif

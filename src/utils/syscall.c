@@ -12,7 +12,7 @@ typedef union syscall_word {
     unsigned char buf[sizeof(long)];
 } syscall_word_t;
 
-long nt_get_syscall_id(pid_t pid)
+long nt_syscall_get_id(pid_t pid)
 {
     int offset = offsetof(struct user, regs.orig_rax);
 
@@ -23,28 +23,36 @@ long nt_get_syscall_id(pid_t pid)
     return val;
 }
 
-long nt_get_syscall_arg(pid_t pid, size_t idx)
+// clang-format off
+static int s_arg_offset[] = {
+    offsetof(struct user, regs.rdi),
+    offsetof(struct user, regs.rsi),
+    offsetof(struct user, regs.rdx),
+    offsetof(struct user, regs.r10),
+    offsetof(struct user, regs.r8),
+    offsetof(struct user, regs.r9),
+};
+// clang-format on
+
+long nt_syscall_get_arg(pid_t pid, size_t idx)
 {
     assert(idx <= 5);
 
-    // clang-format off
-    static int offset[] = {
-        offsetof(struct user, regs.rdi),
-        offsetof(struct user, regs.rsi),
-        offsetof(struct user, regs.rdx),
-        offsetof(struct user, regs.r10),
-        offsetof(struct user, regs.r8),
-        offsetof(struct user, regs.r9),
-    };
-    // clang-format on
-
     errno = 0;
-    long retval = ptrace(PTRACE_PEEKUSER, pid, offset[idx], NULL);
+    long retval = ptrace(PTRACE_PEEKUSER, pid, s_arg_offset[idx], NULL);
     assert(errno == 0);
     return retval;
 }
 
-long nt_get_syscall_ret(pid_t pid)
+void nt_syscall_set_arg(pid_t pid, size_t idx, long val)
+{
+    assert(idx <= 5);
+    long ret = ptrace(PTRACE_POKEUSER, pid, s_arg_offset[idx], val);
+    assert(ret == 0);
+    (void)ret;
+}
+
+long nt_syscall_get_ret(pid_t pid)
 {
     int offset = offsetof(struct user, regs.rax);
 
@@ -98,7 +106,7 @@ long nt_syscall_get_sockaddr(pid_t pid, int arg, struct sockaddr_storage* data)
 {
     const size_t sockv4_len = sizeof(struct sockaddr_in);
     const size_t sockv6_len = sizeof(struct sockaddr_in6);
-    long         p_addr = nt_get_syscall_arg(pid, arg);
+    long         p_addr = nt_syscall_get_arg(pid, arg);
 
     /* Try get IPv4 address. */
     nt_syscall_getdata(pid, p_addr, data, sockv4_len);
@@ -115,6 +123,6 @@ void nt_syscall_set_sockaddr(pid_t pid, long addr, const struct sockaddr_storage
 {
     const size_t sockv4_len = sizeof(struct sockaddr_in);
     const size_t sockv6_len = sizeof(struct sockaddr_in6);
-    size_t write_sz = data->ss_family == AF_INET ? sockv4_len : sockv6_len;
+    size_t       write_sz = data->ss_family == AF_INET ? sockv4_len : sockv6_len;
     nt_syscall_setdata(pid, addr, data, write_sz);
 }

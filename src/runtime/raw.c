@@ -70,32 +70,40 @@ typedef struct nt_proxy_raw
 
 static void s_proxy_raw_close_inbound_channel(nt_proxy_raw_t* raw, proxy_raw_channel_t* ch)
 {
-    if (ch->inbound.event.data.fd >= 0)
+    if (ch->inbound.event.data.fd < 0)
     {
-        if (ch->inbound.event.events != 0)
-        {
-            epoll_ctl(raw->epollfd, EPOLL_CTL_DEL, ch->inbound.event.data.fd, &ch->inbound.event);
-            ch->inbound.event.events = 0;
-        }
-        ev_map_erase(&raw->sock_map, &ch->inbound.node);
-        close(ch->inbound.event.data.fd);
-        ch->inbound.event.data.fd = -1;
+        return;
     }
+
+    LOG_D("[CHID=%d] Close inbound fd=%d.", ch->chid, ch->inbound.event.data.fd);
+    if (ch->inbound.event.events != 0)
+    {
+        epoll_ctl(raw->epollfd, EPOLL_CTL_DEL, ch->inbound.event.data.fd, &ch->inbound.event);
+        ch->inbound.event.events = 0;
+    }
+
+    ev_map_erase(&raw->sock_map, &ch->inbound.node);
+    close(ch->inbound.event.data.fd);
+    ch->inbound.event.data.fd = -1;
 }
 
 static void s_proxy_raw_close_outbound_channel(nt_proxy_raw_t* raw, proxy_raw_channel_t* ch)
 {
-    if (ch->outbound.event.data.fd >= 0)
+    if (ch->outbound.event.data.fd < 0)
     {
-        if (ch->outbound.event.events != 0)
-        {
-            epoll_ctl(raw->epollfd, EPOLL_CTL_DEL, ch->outbound.event.data.fd, &ch->outbound.event);
-            ch->outbound.event.events = 0;
-        }
-        ev_map_erase(&raw->sock_map, &ch->outbound.node);
-        close(ch->outbound.event.data.fd);
-        ch->outbound.event.data.fd = -1;
+        return;
     }
+
+    LOG_D("[CHID=%d] Close outbound fd=%d.", ch->chid, ch->outbound.event.data.fd);
+    if (ch->outbound.event.events != 0)
+    {
+        epoll_ctl(raw->epollfd, EPOLL_CTL_DEL, ch->outbound.event.data.fd, &ch->outbound.event);
+        ch->outbound.event.events = 0;
+    }
+
+    ev_map_erase(&raw->sock_map, &ch->outbound.node);
+    close(ch->outbound.event.data.fd);
+    ch->outbound.event.data.fd = -1;
 }
 
 static void s_proxy_raw_close_inbound_outbound_channel(nt_proxy_raw_t* raw, proxy_raw_channel_t* ch)
@@ -245,26 +253,89 @@ static int s_proxy_raw_channel_create(struct nt_proxy* thiz, int type,
     return chid;
 }
 
-static void s_proxy_raw_handle_event_channel_create(nt_proxy_raw_t*      raw,
-                                                    proxy_raw_channel_t* channel)
+static void s_raw_inbound_want_read(nt_proxy_raw_t* raw, proxy_raw_channel_t* ch)
 {
-    if (channel->inbound.event.data.fd >= 0)
+    if (ch->inbound.event.data.fd >= 0 && !(ch->inbound.event.events & EPOLLIN))
     {
-        ev_map_insert(&raw->sock_map, &channel->inbound.node);
+        int op = ch->inbound.event.events == 0 ? EPOLL_CTL_ADD : EPOLL_CTL_MOD;
+        ch->inbound.event.events |= EPOLLIN;
+        epoll_ctl(raw->epollfd, op, ch->inbound.event.data.fd, &ch->inbound.event);
     }
-    if (channel->outbound.event.data.fd >= 0)
-    {
-        ev_map_insert(&raw->sock_map, &channel->outbound.node);
-    }
-    ev_map_insert(&raw->channel_map, &channel->node);
+}
 
-    if (channel->type == SOCK_STREAM)
+static void s_raw_inbound_stop_read(nt_proxy_raw_t* raw, proxy_raw_channel_t* ch)
+{
+    if (ch->inbound.event.data.fd >= 0 && (ch->inbound.event.events & EPOLLIN))
     {
-        channel->inbound.event.events = EPOLLIN;
-        epoll_ctl(raw->epollfd, EPOLL_CTL_ADD, channel->inbound.event.data.fd,
-                  &channel->inbound.event);
-        return;
+        ch->inbound.event.events &= ~EPOLLIN;
+        int op = ch->inbound.event.events == 0 ? EPOLL_CTL_DEL : EPOLL_CTL_MOD;
+        epoll_ctl(raw->epollfd, op, ch->inbound.event.data.fd, &ch->inbound.event);
     }
+}
+
+static void s_raw_inbound_stop_write(nt_proxy_raw_t* raw, proxy_raw_channel_t* ch)
+{
+    if (ch->inbound.event.data.fd >= 0 && (ch->inbound.event.events & EPOLLOUT))
+    {
+        ch->inbound.event.events &= ~EPOLLOUT;
+        int op = ch->inbound.event.events == 0 ? EPOLL_CTL_DEL : EPOLL_CTL_MOD;
+        epoll_ctl(raw->epollfd, op, ch->inbound.event.data.fd, &ch->inbound.event);
+    }
+}
+
+static void s_raw_outbound_want_read(nt_proxy_raw_t* raw, proxy_raw_channel_t* ch)
+{
+    if (ch->outbound.event.data.fd >= 0 && !(ch->outbound.event.events & EPOLLIN))
+    {
+        int op = ch->outbound.event.events == 0 ? EPOLL_CTL_ADD : EPOLL_CTL_MOD;
+        ch->outbound.event.events |= EPOLLOUT;
+        epoll_ctl(raw->epollfd, op, ch->outbound.event.data.fd, &ch->outbound.event);
+    }
+}
+
+static void s_raw_outbound_want_write(nt_proxy_raw_t* raw, proxy_raw_channel_t* ch)
+{
+    if (ch->outbound.event.data.fd >= 0 && !(ch->outbound.event.events & EPOLLOUT))
+    {
+        int op = ch->outbound.event.events == 0 ? EPOLL_CTL_ADD : EPOLL_CTL_MOD;
+        ch->outbound.event.events |= EPOLLOUT;
+        epoll_ctl(raw->epollfd, op, ch->outbound.event.data.fd, &ch->outbound.event);
+    }
+}
+
+static void s_raw_outbound_stop_read(nt_proxy_raw_t* raw, proxy_raw_channel_t* ch)
+{
+    if (ch->outbound.event.data.fd >= 0 && (ch->outbound.event.events & EPOLLIN))
+    {
+        ch->outbound.event.events &= ~EPOLLIN;
+        int op = ch->outbound.event.events == 0 ? EPOLL_CTL_DEL : EPOLL_CTL_MOD;
+        epoll_ctl(raw->epollfd, op, ch->outbound.event.data.fd, &ch->outbound.event);
+    }
+}
+
+static void s_raw_outbound_stop_write(nt_proxy_raw_t* raw, proxy_raw_channel_t* ch)
+{
+    if (ch->outbound.event.data.fd >= 0 && (ch->outbound.event.events & EPOLLOUT))
+    {
+        ch->outbound.event.events &= ~EPOLLOUT;
+        int op = ch->outbound.event.events == 0 ? EPOLL_CTL_DEL : EPOLL_CTL_MOD;
+        epoll_ctl(raw->epollfd, op, ch->outbound.event.data.fd, &ch->outbound.event);
+    }
+}
+
+static void s_proxy_raw_handle_event_channel_create(nt_proxy_raw_t* raw, proxy_raw_channel_t* ch)
+{
+    if (ch->inbound.event.data.fd >= 0)
+    {
+        ev_map_insert(&raw->sock_map, &ch->inbound.node);
+    }
+    if (ch->outbound.event.data.fd >= 0)
+    {
+        ev_map_insert(&raw->sock_map, &ch->outbound.node);
+    }
+    ev_map_insert(&raw->channel_map, &ch->node);
+
+    s_raw_inbound_want_read(raw, ch);
 }
 
 static void s_proxy_raw_handle_event_channel_release(nt_proxy_raw_t* raw, int chid)
@@ -322,45 +393,25 @@ static void s_proxy_raw_handle_inbound_w(nt_proxy_raw_t* raw, proxy_raw_channel_
     ssize_t write_sz = nt_write(ch->inbound.event.data.fd, ch->dbuf, ch->dbuf_sz);
     if (write_sz < 0)
     {
+        LOG_D("[CHID=%d] write() failed: (%d) %s. Close inbound.", ch->chid, write_sz,
+              NT_STRERROR(write_sz));
         s_proxy_raw_close_inbound_channel(raw, ch);
-    }
-    else
-    {
-        ch->dbuf_sz -= write_sz;
-    }
-
-    /* If inbound is closed and nothing to upload, close outbound. */
-    if (ch->inbound.event.data.fd < 0 && ch->ubuf_sz == 0)
-    {
-        s_proxy_raw_close_outbound_channel(raw, ch);
         return;
     }
+    ch->dbuf_sz -= write_sz;
 
     if (ch->dbuf_sz > 0)
     { /* dbuf is not empty, move buffer and try again. */
         memmove(ch->dbuf, ch->dbuf + write_sz, ch->dbuf_sz);
     }
-    else if (ch->inbound.event.data.fd >= 0)
+    else
     { /* dbuf is empty, remove EPOLLOUT */
-        ch->inbound.event.events &= ~EPOLLOUT;
-        int op = ch->inbound.event.events == 0 ? EPOLL_CTL_DEL : EPOLL_CTL_MOD;
-        epoll_ctl(raw->epollfd, op, ch->inbound.event.data.fd, &ch->inbound.event);
+        s_raw_inbound_stop_write(raw, ch);
     }
 
-    /* If dbuf is empty and outbound is closed, now we can close inbound. */
-    if (ch->dbuf_sz == 0 && ch->outbound.event.data.fd < 0)
+    if (ch->dbuf_sz < sizeof(ch->dbuf))
     {
-        s_proxy_raw_close_inbound_channel(raw, ch);
-        return;
-    }
-
-    /* If dbuf is not full, continue reading from outbound. */
-    if (ch->dbuf_sz < sizeof(ch->dbuf) && ch->outbound.event.data.fd >= 0 &&
-        !(ch->outbound.event.events & EPOLLIN))
-    {
-        int op = ch->outbound.event.events == 0 ? EPOLL_CTL_ADD : EPOLL_CTL_MOD;
-        ch->outbound.event.events |= EPOLLIN;
-        epoll_ctl(raw->epollfd, op, ch->outbound.event.data.fd, &ch->outbound.event);
+        s_raw_outbound_want_read(raw, ch);
     }
 }
 
@@ -377,8 +428,8 @@ static void s_proxy_raw_handle_inbound_tcp_listen(nt_proxy_raw_t* raw, proxy_raw
 
     /* Register read. */
     ch->inbound.event.data.fd = fd;
-    ch->inbound.event.events = EPOLLIN;
-    epoll_ctl(raw->epollfd, EPOLL_CTL_ADD, fd, &ch->inbound.event);
+    ev_map_insert(&raw->sock_map, &ch->inbound.node);
+    s_raw_inbound_want_read(raw, ch);
 }
 
 static void s_proxy_raw_handle_inbound_tcp_r(nt_proxy_raw_t* raw, proxy_raw_channel_t* ch)
@@ -400,32 +451,21 @@ static void s_proxy_raw_handle_inbound_tcp_r(nt_proxy_raw_t* raw, proxy_raw_chan
         }
         return;
     }
-    else if (read_sz == 0)
+    if (read_sz == 0)
     { /* Peer close. */
         LOG_D("[CHID=%d] Inbound peer closed. Close inbound.", ch->chid);
         s_proxy_raw_close_inbound_channel(raw, ch);
         return;
     }
-    else
-    {
-        ch->ubuf_sz += read_sz;
-    }
+    ch->ubuf_sz += read_sz;
 
     /* Write to outbound. */
-    if (ch->outbound.event.data.fd >= 0 && ch->ubuf_sz > 0 &&
-        !(ch->outbound.event.events & EPOLLOUT))
-    {
-        int op = ch->outbound.event.events == 0 ? EPOLL_CTL_ADD : EPOLL_CTL_MOD;
-        ch->outbound.event.events |= EPOLLOUT;
-        epoll_ctl(raw->epollfd, op, ch->outbound.event.data.fd, &ch->outbound.event);
-    }
+    s_raw_outbound_want_write(raw, ch);
 
     /* If ubuf is full, remove EPOLLIN for inbound. */
-    if (ch->inbound.event.data.fd >= 0 && ch->ubuf_sz == sizeof(ch->ubuf))
+    if (ch->ubuf_sz == sizeof(ch->ubuf))
     {
-        ch->inbound.event.events &= ~EPOLLIN;
-        int op = ch->inbound.event.events == 0 ? EPOLL_CTL_DEL : EPOLL_CTL_MOD;
-        epoll_ctl(raw->epollfd, op, ch->inbound.event.data.fd, &ch->inbound.event);
+        s_raw_inbound_stop_read(raw, ch);
     }
 }
 
@@ -447,44 +487,25 @@ static void s_proxy_raw_handle_outbound_w(nt_proxy_raw_t* raw, proxy_raw_channel
     ssize_t write_sz = nt_write(ch->outbound.event.data.fd, ch->ubuf, ch->ubuf_sz);
     if (write_sz < 0)
     {
+        LOG_D("[CHID=%d] write() failed: (%d) %s. Close outbound.", ch->chid, write_sz,
+              NT_STRERROR(write_sz));
         s_proxy_raw_close_outbound_channel(raw, ch);
-    }
-    else
-    {
-        ch->ubuf_sz -= write_sz;
-    }
-
-    /* If outbound is closed and dbuf is empty, close inbound. */
-    if (ch->outbound.event.data.fd < 0 && ch->dbuf_sz == 0)
-    {
-        s_proxy_raw_close_inbound_channel(raw, ch);
         return;
     }
+    ch->ubuf_sz -= write_sz;
 
     if (ch->ubuf_sz > 0)
     { /* ubuf is not empty, move buffer and try again. */
         memmove(ch->ubuf, ch->ubuf + write_sz, ch->ubuf_sz);
     }
-    else if (ch->outbound.event.data.fd >= 0)
+    else
     { /* ubuf is empty, remove EPOLLOUT */
-        ch->outbound.event.events &= ~EPOLLOUT;
-        int op = ch->outbound.event.events == 0 ? EPOLL_CTL_DEL : EPOLL_CTL_MOD;
-        epoll_ctl(raw->epollfd, op, ch->outbound.event.data.fd, &ch->outbound.event);
+        s_raw_outbound_stop_write(raw, ch);
     }
 
-    /* If ubuf is empty and inbound is closed, now we can close outbound. */
-    if (ch->ubuf_sz == 0 && ch->inbound.event.data.fd < 0)
+    if (ch->ubuf_sz < sizeof(ch->ubuf))
     {
-        s_proxy_raw_close_outbound_channel(raw, ch);
-        return;
-    }
-
-    /* If ubuf is not full, continue reading from inbound. */
-    if (ch->ubuf_sz < sizeof(ch->ubuf) && !(ch->inbound.event.events & EPOLLIN))
-    {
-        int op = ch->inbound.event.events == 0 ? EPOLL_CTL_ADD : EPOLL_CTL_MOD;
-        ch->inbound.event.events |= EPOLLIN;
-        epoll_ctl(raw->epollfd, op, ch->inbound.event.data.fd, &ch->inbound.event);
+        s_raw_inbound_want_read(raw, ch);
     }
 }
 
@@ -506,31 +527,20 @@ static void s_proxy_raw_handle_outbound_r(nt_proxy_raw_t* raw, proxy_raw_channel
         }
         return;
     }
-    else if (read_sz == 0)
+    if (read_sz == 0)
     {
         LOG_D("[CHID=%d] Outbound peer closed. Close outbound.", ch->chid);
         s_proxy_raw_close_outbound_channel(raw, ch);
         return;
     }
-    else
-    {
-        ch->dbuf_sz += read_sz;
-    }
+    ch->dbuf_sz += read_sz;
 
-    /* Write to inbound. */
-    if (ch->inbound.event.data.fd >= 0 && ch->dbuf_sz > 0 && !(ch->inbound.event.events & EPOLLOUT))
-    {
-        int op = ch->inbound.event.events == 0 ? EPOLL_CTL_ADD : EPOLL_CTL_MOD;
-        ch->inbound.event.events |= EPOLLOUT;
-        epoll_ctl(raw->epollfd, op, ch->inbound.event.data.fd, &ch->inbound.event);
-    }
+    s_raw_outbound_want_write(raw, ch);
 
-    /* If dbuf is full, remove EPOLLIN for inbound. */
-    if (ch->outbound.event.data.fd >= 0 && ch->dbuf_sz == sizeof(ch->dbuf))
+    /* If dbuf is full, remove EPOLLIN for outbound. */
+    if (ch->dbuf_sz == sizeof(ch->dbuf))
     {
-        ch->outbound.event.events &= ~EPOLLIN;
-        int op = ch->outbound.event.events == 0 ? EPOLL_CTL_DEL : EPOLL_CTL_MOD;
-        epoll_ctl(raw->epollfd, op, ch->outbound.event.data.fd, &ch->outbound.event);
+        s_raw_outbound_stop_read(raw, ch);
     }
 }
 
@@ -577,6 +587,14 @@ static void s_proxy_raw_handle_channel(nt_proxy_raw_t* raw, proxy_raw_channel_t*
     }
 }
 
+static raw_sock_t* s_raw_find_sock(nt_proxy_raw_t* raw, int fd)
+{
+    raw_sock_t tmp;
+    tmp.event.data.fd = fd;
+    ev_map_node_t* it = ev_map_find(&raw->sock_map, &tmp.node);
+    return it != NULL ? container_of(it, raw_sock_t, node) : NULL;
+}
+
 static void s_proxy_raw_handle(nt_proxy_raw_t* raw, struct epoll_event* event)
 {
     if (event->data.fd == raw->eventfd)
@@ -587,13 +605,12 @@ static void s_proxy_raw_handle(nt_proxy_raw_t* raw, struct epoll_event* event)
     }
     else
     {
-        raw_sock_t tmp;
-        tmp.event.data.fd = event->data.fd;
-        ev_map_node_t* it = ev_map_find(&raw->sock_map, &tmp.node);
-        assert(it != NULL);
-        raw_sock_t*          sock = container_of(it, raw_sock_t, node);
-        proxy_raw_channel_t* ch = sock->channel;
-        s_proxy_raw_handle_channel(raw, ch, event);
+        raw_sock_t* sock = s_raw_find_sock(raw, event->data.fd);
+        if (sock != NULL)
+        {
+            proxy_raw_channel_t* ch = sock->channel;
+            s_proxy_raw_handle_channel(raw, ch, event);
+        }
     }
 }
 

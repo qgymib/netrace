@@ -1,5 +1,6 @@
 
 add_executable(${PROJECT_NAME}_test
+    "cases/clone_escape.c"
     "cases/connect.c"
     "cases/dns_parser.c"
     "cases/exitcode.c"
@@ -8,6 +9,8 @@ add_executable(${PROJECT_NAME}_test
     "tools/__init__.c"
     "tools/exit.c"
     "tools/slice.c"
+    "utils/msg.c"
+    "utils/simple_server.c"
     "utils/socket2.c"
     "cutest.c"
     "runtime.c"
