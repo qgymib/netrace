@@ -105,7 +105,7 @@ TEST_SUBROUTE(grandchild_connect)
     }
 
     int wstatus = 0;
-    assert(waitpid(pid, &wstatus, 0) == pid);
+    NT_ASSERT(waitpid(pid, &wstatus, 0) == pid, "(%d) %s.", errno, strerror(errno));
     assert(WIFEXITED(wstatus));
     assert(WEXITSTATUS(wstatus) == 0);
 

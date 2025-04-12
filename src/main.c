@@ -217,13 +217,15 @@ REWRITE_ADDRESS:
     nt_syscall_set_sockaddr(prog->pid, p_sockaddr, &proxyaddr);
 }
 
-#include <sys/reg.h>
-
 static void s_trace_syscall_clone_enter(prog_node_t* prog)
 {
     long flags = nt_syscall_get_arg(prog->pid, 0);
     flags &= ~CLONE_UNTRACED;
-    flags |= CLONE_PTRACE;
+
+    /*
+     * `CLONE_PTRACE` seems useless on x86_64 and cause fork() return invalid value in aarch64.
+     */
+    // flags |= CLONE_PTRACE;
     nt_syscall_set_arg(prog->pid, 0, flags);
 }
 

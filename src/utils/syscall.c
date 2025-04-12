@@ -5,12 +5,26 @@
 #include <sys/user.h>
 #include <sys/ptrace.h>
 #include "utils/defs.h"
+#include "utils/log.h"
 #include "syscall.h"
 
 typedef union syscall_word {
     long          val;
     unsigned char buf[sizeof(long)];
 } syscall_word_t;
+
+#if defined(__x86_64__)
+
+/* clang-format off */
+static int s_arg_offset[] = {
+    offsetof(struct user, regs.rdi),
+    offsetof(struct user, regs.rsi),
+    offsetof(struct user, regs.rdx),
+    offsetof(struct user, regs.r10),
+    offsetof(struct user, regs.r8),
+    offsetof(struct user, regs.r9),
+};
+/* clang-format on */
 
 long nt_syscall_get_id(pid_t pid)
 {
@@ -23,16 +37,15 @@ long nt_syscall_get_id(pid_t pid)
     return val;
 }
 
-// clang-format off
-static int s_arg_offset[] = {
-    offsetof(struct user, regs.rdi),
-    offsetof(struct user, regs.rsi),
-    offsetof(struct user, regs.rdx),
-    offsetof(struct user, regs.r10),
-    offsetof(struct user, regs.r8),
-    offsetof(struct user, regs.r9),
-};
-// clang-format on
+long nt_syscall_get_ret(pid_t pid)
+{
+    int offset = offsetof(struct user, regs.rax);
+
+    errno = 0;
+    long retval = ptrace(PTRACE_PEEKUSER, pid, offset, NULL);
+    assert(errno == 0);
+    return retval;
+}
 
 long nt_syscall_get_arg(pid_t pid, size_t idx)
 {
@@ -52,15 +65,82 @@ void nt_syscall_set_arg(pid_t pid, size_t idx, long val)
     (void)ret;
 }
 
+#elif defined(__aarch64__)
+
+#include <elf.h>
+
+long nt_syscall_get_id(pid_t pid)
+{
+    struct user_regs_struct regs;
+    struct iovec            iov = {
+                   .iov_base = &regs,
+                   .iov_len = sizeof(regs),
+    };
+    /* clang-format off */
+    NT_ASSERT(ptrace(PTRACE_GETREGSET, pid, NT_PRSTATUS, &iov) == 0,
+        "(%d) %s.", errno, strerror(errno));
+    /* clang-format on */
+    assert(iov.iov_len == sizeof(regs));
+    return regs.regs[8];
+}
+
 long nt_syscall_get_ret(pid_t pid)
 {
-    int offset = offsetof(struct user, regs.rax);
-
-    errno = 0;
-    long retval = ptrace(PTRACE_PEEKUSER, pid, offset, NULL);
-    assert(errno == 0);
-    return retval;
+    struct user_regs_struct regs;
+    struct iovec            iov = {
+                   .iov_base = &regs,
+                   .iov_len = sizeof(regs),
+    };
+    /* clang-format off */
+    NT_ASSERT(ptrace(PTRACE_GETREGSET, pid, NT_PRSTATUS, &iov) == 0,
+        "(%d) %s.", errno, strerror(errno));
+    /* clang-format on */
+    assert(iov.iov_len == sizeof(regs));
+    return regs.regs[0];
 }
+
+long nt_syscall_get_arg(pid_t pid, size_t idx)
+{
+    struct user_regs_struct regs;
+    struct iovec            iov = {
+                   .iov_base = &regs,
+                   .iov_len = sizeof(regs),
+    };
+    /* clang-format off */
+    NT_ASSERT(ptrace(PTRACE_GETREGSET, pid, NT_PRSTATUS, &iov) == 0,
+        "(%d) %s.", errno, strerror(errno));
+    /* clang-format on */
+    assert(iov.iov_len == sizeof(regs));
+
+    return regs.regs[idx];
+}
+
+void nt_syscall_set_arg(pid_t pid, size_t idx, long val)
+{
+    struct user_regs_struct regs;
+    struct iovec            iov = {
+                   .iov_base = &regs,
+                   .iov_len = sizeof(regs),
+    };
+    /* clang-format off */
+    NT_ASSERT(ptrace(PTRACE_GETREGSET, pid, NT_PRSTATUS, &iov) == 0,
+        "(%d) %s.", errno, strerror(errno));
+    /* clang-format on */
+    assert(iov.iov_len == sizeof(regs));
+
+    regs.regs[idx] = val;
+
+    /* clang-format off */
+    NT_ASSERT(ptrace(PTRACE_SETREGSET, pid, NT_PRSTATUS, &iov) == 0,
+        "(%d) %s.", errno, strerror(errno));
+    /* clang-format on */
+}
+
+#else
+
+#error Unsupport archive.
+
+#endif
 
 void nt_syscall_getdata(pid_t pid, long addr, void* dst, size_t len)
 {
