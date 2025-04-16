@@ -126,7 +126,8 @@ static nt_log_level_t s_cmd_opt_parse_loglevel(const char* level)
 void nt_cmd_opt_parse(nt_cmd_opt_t* opt, int argc, char** argv)
 {
     int         i, flag_prog_args = 0;
-    const char* opt_proxy = "socks5://" NT_DEFAULT_SOCKS5_ADDR ":" STRINGIFY(NT_DEFAULT_SOCKS5_PORT);
+    const char* opt_proxy =
+        "socks5://" NT_DEFAULT_SOCKS5_ADDR ":" STRINGIFY(NT_DEFAULT_SOCKS5_PORT);
     const char* opt_bypass = "default";
     const char* opt_dns = NULL;
     const char* log_level = NULL;
@@ -157,6 +158,9 @@ void nt_cmd_opt_parse(nt_cmd_opt_t* opt, int argc, char** argv)
         NT_CMD_PARSE_OPTION(opt_bypass, "--bypass");
         NT_CMD_PARSE_OPTION(opt_dns, "--dns");
         NT_CMD_PARSE_OPTION(log_level, "--loglevel");
+
+        LOG_E("Unknown option `%s`.", argv[i]);
+        exit(EXIT_FAILURE);
 
     CONTINUE:
     }
