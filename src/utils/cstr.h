@@ -25,6 +25,12 @@ typedef c_str_t* c_str_arr_t;
 typedef void* (*c_str_realloc_fn)(void*, size_t);
 
 /**
+ * @brief Split map function.
+ * @return zero to accept, non-zero to refuse.
+ */
+typedef int (*c_str_split_map_fn)(const char* s, size_t n, void* arg);
+
+/**
  * @brief Set realloc functon.
  * @param[in] func Realloc function.
  * @return The old function.
@@ -60,6 +66,14 @@ c_str_t c_str_new_len(const char* s, size_t n);
  * @return New string.
  */
 c_str_t c_str_cat_len(c_str_t cs, const char* s, size_t n);
+
+/**
+ * @brief Returns a string that has whitespace removed from the start and the end, and that has each
+ *   sequence of internal whitespace replaced with a single space.
+ * @param[in] cs C string.
+ * @return String.
+ */
+c_str_t c_str_simplified(c_str_t cs);
 
 /**
  * @brief Create a new string array.
@@ -111,7 +125,19 @@ c_str_arr_t c_str_arr_dup(const c_str_arr_t arr);
  * @param[in] delim Split string.
  * @return String array. Use #c_str_free() to release it.
  */
-c_str_arr_t c_str_split(c_str_t s, const char* delim);
+c_str_arr_t c_str_split(const c_str_t s, const char* delim);
+
+/**
+ * @brief Split string into array.
+ * @param[in] s Source string.
+ * @param[in] delim Split string.
+ * @param[in] delim_sz Split string length.
+ * @param[in] fn  Map function.
+ * @param[in] arg User defined argument pass to \p fn.
+ * @return String array. Use #c_str_free() to release it.
+ */
+c_str_arr_t c_str_split_ex(const c_str_t s, const char* delim, size_t delim_sz,
+                           c_str_split_map_fn fn, void* arg);
 
 #ifdef __cplusplus
 }

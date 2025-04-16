@@ -2,7 +2,6 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <fcntl.h>
-#include <regex.h>
 #include "utils/defs.h"
 #include "utils/memory.h"
 #include "utils/msg.h"
@@ -74,19 +73,35 @@ static c_str_t s_read_file(const char* path)
     return buf;
 }
 
+static int s_split_tracerid(const char* s, size_t n, void* arg)
+{
+    (void)n;
+    (void)arg;
+    const char* pat = "TracerPid:";
+    return strncmp(s, pat, strlen(pat));
+}
+
 static int s_test_is_traced(void)
 {
+    /* Read status */
     c_str_t data = s_read_file("/proc/self/status");
     ASSERT_NE_PTR(data, NULL);
 
-    regex_t preg;
-    ASSERT_EQ_INT(regcomp(&preg, "TracerPid:\\s+(%d)", REG_EXTENDED), 0);
+    /* Split into lines, find out lines start with `TracerPid:` */
+    c_str_arr_t tracer_line = c_str_split_ex(data, "\n", 1, s_split_tracerid, NULL);
+    c_str_free(data);
+    ASSERT_EQ_SIZE(c_str_arr_len(tracer_line), 1);
 
-    regmatch_t pmatch[2];
-    int ret = regexec(&preg, data, 2, pmatch, 0);
+    /* Split */
+    c_str_arr_t kv = c_str_split(tracer_line[0], ":");
+    c_str_free(tracer_line);
+    ASSERT_EQ_SIZE(c_str_arr_len(kv), 2);
+    kv[1] = c_str_simplified(kv[1]);
 
-    regfree(&preg);
-    return ret == 0;
+    int ret = strcmp(kv[1], "0");
+    c_str_free(kv);
+
+    return ret;
 }
 
 TEST_F(pid, attach)
@@ -98,4 +113,6 @@ TEST_F(pid, attach)
     {
         nt_sleep(100);
     }
+
+    pthread_join(tid, NULL);
 }

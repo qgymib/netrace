@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <ctype.h>
 #include "cstr.h"
 
 /**
@@ -143,6 +144,33 @@ c_str_t c_str_cat_len(c_str_t cs, const char* s, size_t n)
     return new_str->header.data;
 }
 
+c_str_t c_str_simplified(c_str_t cs)
+{
+    c_str_string_t* str = CSTR_STRING(cs);
+    size_t          str_sz = str->size;
+    size_t          i;
+    for (i = 0; i < str_sz;)
+    {
+        char*  pos = str->header.data + i;
+        size_t left_sz = str->size - i;
+        if (isspace(*pos))
+        {
+            memmove(pos, pos + 1, left_sz - 1);
+            str_sz--;
+        }
+        else
+        {
+            i++;
+        }
+    }
+    str->size = str_sz;
+    size_t          malloc_sz = sizeof(c_str_string_t) + str_sz + 1;
+    c_str_string_t* new_str = s_realloc(str, malloc_sz);
+
+    /* It is Ok if realloc failed. The original string still works. */
+    return new_str != NULL ? new_str->header.data : str->header.data;
+}
+
 c_str_arr_t c_str_arr_new(void)
 {
     size_t         malloc_sz = sizeof(c_str_array_t) + sizeof(c_str_t);
@@ -224,12 +252,18 @@ c_str_arr_t c_str_arr_dup(const c_str_arr_t arr)
     return dup;
 }
 
-c_str_arr_t c_str_split(c_str_t s, const char* delim)
+c_str_arr_t c_str_split(const c_str_t s, const char* delim)
 {
-    size_t   offset = 0;
-    size_t   delim_sz = strlen(delim);
-    size_t   s_sz = c_str_len(s);
-    c_str_t* arr = c_str_arr_new();
+    return c_str_split_ex(s, delim, strlen(delim), NULL, NULL);
+}
+
+c_str_arr_t c_str_split_ex(const c_str_t s, const char* delim, size_t delim_sz,
+                           c_str_split_map_fn fn, void* arg)
+{
+    size_t      offset = 0;
+    size_t      s_sz = c_str_len(s);
+    c_str_arr_t arr = c_str_arr_new();
+    c_str_arr_t new_arr;
     if (arr == NULL)
     {
         return NULL;
@@ -245,23 +279,31 @@ c_str_arr_t c_str_split(c_str_t s, const char* delim)
         {
             break;
         }
+        size_t slice_sz = pos - start;
 
-        c_str_t* new_arr = c_str_arr_cat_len(arr, start, pos - start);
-        if (new_arr == NULL)
+        if (fn == NULL || fn(start, slice_sz, arg) == 0)
+        {
+            if ((new_arr = c_str_arr_cat_len(arr, start, slice_sz)) == NULL)
+            {
+                c_str_free(arr);
+                return NULL;
+            }
+            arr = new_arr;
+        }
+        offset = pos - s + delim_sz;
+    }
+
+    const char* start = s + offset;
+    size_t      slice_sz = s_sz - offset;
+    if (fn == NULL || fn(start, slice_sz, arg) == 0)
+    {
+        if ((new_arr = c_str_arr_cat_len(arr, start, slice_sz)) == NULL)
         {
             c_str_free(arr);
             return NULL;
         }
         arr = new_arr;
-        offset = pos - s + delim_sz;
     }
 
-    c_str_t* new_arr = c_str_arr_cat_len(arr, s + offset, s_sz - offset);
-    if (new_arr == NULL)
-    {
-        c_str_free(arr);
-        return NULL;
-    }
-
-    return new_arr;
+    return arr;
 }
