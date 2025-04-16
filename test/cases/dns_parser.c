@@ -65,11 +65,11 @@ TEST_F(dns_parser, query)
     ASSERT_EQ_UINT(s_dns_msg->header.ancount, 0);
     ASSERT_EQ_UINT(s_dns_msg->header.nscount, 0);
     ASSERT_EQ_UINT(s_dns_msg->header.arcount, 0);
-    ASSERT_EQ_SIZE(s_dns_msg->questions[0].qname.size, 4);
-    ASSERT_EQ_STR(s_dns_msg->questions[0].qname.data[0].data, "content-signature-2");
-    ASSERT_EQ_STR(s_dns_msg->questions[0].qname.data[1].data, "cdn");
-    ASSERT_EQ_STR(s_dns_msg->questions[0].qname.data[2].data, "mozilla");
-    ASSERT_EQ_STR(s_dns_msg->questions[0].qname.data[3].data, "net");
+    ASSERT_EQ_SIZE(c_str_arr_len(s_dns_msg->questions[0].qname), 4);
+    ASSERT_EQ_STR(s_dns_msg->questions[0].qname[0], "content-signature-2");
+    ASSERT_EQ_STR(s_dns_msg->questions[0].qname[1], "cdn");
+    ASSERT_EQ_STR(s_dns_msg->questions[0].qname[2], "mozilla");
+    ASSERT_EQ_STR(s_dns_msg->questions[0].qname[3], "net");
     ASSERT_EQ_UINT(s_dns_msg->questions[0].qtype, 1);
     ASSERT_EQ_UINT(s_dns_msg->questions[0].qclass, 1);
 }
@@ -169,33 +169,33 @@ TEST_F(dns_parser, response)
     ASSERT_EQ_UINT(s_dns_msg->header.nscount, 0);
     ASSERT_EQ_UINT(s_dns_msg->header.arcount, 0);
 
-    ASSERT_EQ_SIZE(s_dns_msg->questions[0].qname.size, 4);
-    ASSERT_EQ_STR(s_dns_msg->questions[0].qname.data[0].data, "content-signature-2");
-    ASSERT_EQ_STR(s_dns_msg->questions[0].qname.data[1].data, "cdn");
-    ASSERT_EQ_STR(s_dns_msg->questions[0].qname.data[2].data, "mozilla");
-    ASSERT_EQ_STR(s_dns_msg->questions[0].qname.data[3].data, "net");
+    ASSERT_EQ_SIZE(c_str_arr_len(s_dns_msg->questions[0].qname), 4);
+    ASSERT_EQ_STR(s_dns_msg->questions[0].qname[0], "content-signature-2");
+    ASSERT_EQ_STR(s_dns_msg->questions[0].qname[1], "cdn");
+    ASSERT_EQ_STR(s_dns_msg->questions[0].qname[2], "mozilla");
+    ASSERT_EQ_STR(s_dns_msg->questions[0].qname[3], "net");
     ASSERT_EQ_UINT(s_dns_msg->questions[0].qtype, 1);
     ASSERT_EQ_UINT(s_dns_msg->questions[0].qclass, 1);
 
-    ASSERT_EQ_SIZE(s_dns_msg->answer[0].name.size, 4);
-    ASSERT_EQ_STR(s_dns_msg->answer[0].name.data[0].data, "content-signature-2");
-    ASSERT_EQ_STR(s_dns_msg->answer[0].name.data[1].data, "cdn");
-    ASSERT_EQ_STR(s_dns_msg->answer[0].name.data[2].data, "mozilla");
-    ASSERT_EQ_STR(s_dns_msg->answer[0].name.data[3].data, "net");
+    ASSERT_EQ_SIZE(c_str_arr_len(s_dns_msg->answer[0].name), 4);
+    ASSERT_EQ_STR(s_dns_msg->answer[0].name[0], "content-signature-2");
+    ASSERT_EQ_STR(s_dns_msg->answer[0].name[1], "cdn");
+    ASSERT_EQ_STR(s_dns_msg->answer[0].name[2], "mozilla");
+    ASSERT_EQ_STR(s_dns_msg->answer[0].name[3], "net");
 
-    ASSERT_EQ_SIZE(s_dns_msg->answer[1].name.size, 6);
-    ASSERT_EQ_STR(s_dns_msg->answer[1].name.data[0].data, "content-signature-chains");
-    ASSERT_EQ_STR(s_dns_msg->answer[1].name.data[1].data, "prod");
-    ASSERT_EQ_STR(s_dns_msg->answer[1].name.data[2].data, "autograph");
-    ASSERT_EQ_STR(s_dns_msg->answer[1].name.data[3].data, "services");
-    ASSERT_EQ_STR(s_dns_msg->answer[1].name.data[4].data, "mozaws");
-    ASSERT_EQ_STR(s_dns_msg->answer[1].name.data[5].data, "net");
+    ASSERT_EQ_SIZE(c_str_arr_len(s_dns_msg->answer[1].name), 6);
+    ASSERT_EQ_STR(s_dns_msg->answer[1].name[0], "content-signature-chains");
+    ASSERT_EQ_STR(s_dns_msg->answer[1].name[1], "prod");
+    ASSERT_EQ_STR(s_dns_msg->answer[1].name[2], "autograph");
+    ASSERT_EQ_STR(s_dns_msg->answer[1].name[3], "services");
+    ASSERT_EQ_STR(s_dns_msg->answer[1].name[4], "mozaws");
+    ASSERT_EQ_STR(s_dns_msg->answer[1].name[5], "net");
 
-    ASSERT_EQ_SIZE(s_dns_msg->answer[2].name.size, 6);
-    ASSERT_EQ_STR(s_dns_msg->answer[2].name.data[0].data, "prod");
-    ASSERT_EQ_STR(s_dns_msg->answer[2].name.data[1].data, "content-signature-chains");
-    ASSERT_EQ_STR(s_dns_msg->answer[2].name.data[2].data, "prod");
-    ASSERT_EQ_STR(s_dns_msg->answer[2].name.data[3].data, "webservices");
-    ASSERT_EQ_STR(s_dns_msg->answer[2].name.data[4].data, "mozgcp");
-    ASSERT_EQ_STR(s_dns_msg->answer[2].name.data[5].data, "net");
+    ASSERT_EQ_SIZE(c_str_arr_len(s_dns_msg->answer[2].name), 6);
+    ASSERT_EQ_STR(s_dns_msg->answer[2].name[0], "prod");
+    ASSERT_EQ_STR(s_dns_msg->answer[2].name[1], "content-signature-chains");
+    ASSERT_EQ_STR(s_dns_msg->answer[2].name[2], "prod");
+    ASSERT_EQ_STR(s_dns_msg->answer[2].name[3], "webservices");
+    ASSERT_EQ_STR(s_dns_msg->answer[2].name[4], "mozgcp");
+    ASSERT_EQ_STR(s_dns_msg->answer[2].name[5], "net");
 }

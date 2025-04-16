@@ -2,6 +2,7 @@
 add_executable(${PROJECT_NAME}_test
     "cases/clone_escape.c"
     "cases/connect.c"
+    "cases/cstr.c"
     "cases/dns_parser.c"
     "cases/exitcode.c"
     "cases/grandchild.c"

@@ -1,6 +1,7 @@
 #ifndef NT_UTILS_CMD_OPTION_H
 #define NT_UTILS_CMD_OPTION_H
 
+#include "utils/cstr.h"
 #include "utils/log.h"
 
 #ifdef __cplusplus
@@ -9,11 +10,11 @@ extern "C" {
 
 typedef struct nt_cmd_opt
 {
-    const char*    opt_proxy;  /* --proxy */
-    const char*    opt_bypass; /* --bypass */
-    const char*    opt_dns;    /* --dns */
+    c_str_t        opt_proxy;  /* --proxy */
+    c_str_t        opt_bypass; /* --bypass */
+    c_str_t        opt_dns;    /* --dns */
     nt_log_level_t log_level;  /* --loglevel */
-    char**         prog_args;  /* Arguments for child program, ending with NULL. */
+    c_str_arr_t    prog_args;  /* Arguments for child program, ending with NULL. */
 } nt_cmd_opt_t;
 
 /**

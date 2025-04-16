@@ -22,7 +22,7 @@ static void s_dns_msg_free_question(nt_dns_msg_t* msg)
     for (i = 0; i < msg->header.qdcount; i++)
     {
         nt_dns_question_t* q = &msg->questions[i];
-        nt_str_arr_free(&q->qname);
+        c_str_free(q->qname);
     }
     nt_free(msg->questions);
 }
@@ -33,7 +33,7 @@ static void s_dns_msg_free_resource(nt_dns_resource_t* resource, size_t n)
     for (i = 0; i < n; i++)
     {
         nt_dns_resource_t* r = &resource[i];
-        nt_str_arr_free(&r->name);
+        c_str_free(r->name);
         nt_free(r->rdata);
     }
     nt_free(resource);
@@ -110,7 +110,7 @@ static ssize_t s_dns_trace_pointer(const uint8_t* data, size_t size, size_t pos)
     return NT_ERR(ELOOP);
 }
 
-static ssize_t s_dns_parse_labels(nt_str_arr_t* labels, const uint8_t* data, size_t size,
+static ssize_t s_dns_parse_labels(c_str_arr_t* labels, const uint8_t* data, size_t size,
                                   size_t pos)
 {
     ssize_t ref, ret = 0;
@@ -141,7 +141,7 @@ static ssize_t s_dns_parse_labels(nt_str_arr_t* labels, const uint8_t* data, siz
         {
             return NT_ERR(EINVAL);
         }
-        nt_str_arr_append(labels, (char*)&data[ref], len);
+        *labels = c_str_arr_cat_len(*labels, (char*)&data[ref], len);
 
         offset = ref + len;
         if (!jump)
@@ -237,21 +237,21 @@ static int s_dns_parse_resource(nt_dns_resource_t** dst, size_t n, const uint8_t
     return offset - pos;
 }
 
-static int s_dns_build_label(uint8_t* buff, size_t size, const nt_str_arr_t* label)
+static int s_dns_build_label(uint8_t* buff, size_t size, const c_str_arr_t label)
 {
     size_t i;
     size_t offset = 0;
-    for (i = 0; i < label->size; i++)
+    for (i = 0; i < c_str_arr_len(label); i++)
     {
-        const nt_str_t* s = &label->data[i];
-        if (offset + s->size >= size)
+        const c_str_t s = label[i];
+        if (offset + c_str_len(s) >= size)
         {
             return NT_ERR(ENOSPC);
         }
 
-        s_dns_set_u8(&buff[offset++], s->size);
-        memcpy(&buff[offset], s->data, s->size);
-        offset += s->size;
+        s_dns_set_u8(&buff[offset++], c_str_len(s));
+        memcpy(&buff[offset], s, c_str_len(s));
+        offset += c_str_len(s);
     }
     if (offset >= size)
     {
@@ -269,7 +269,7 @@ static int s_dns_build_question(uint8_t* buff, size_t size, const nt_dns_questio
     for (i = 0; i < n; i++)
     {
         const nt_dns_question_t* q = &req[i];
-        if ((ret = s_dns_build_label(buff + offset, size - offset, &q->qname)) < 0)
+        if ((ret = s_dns_build_label(buff + offset, size - offset, q->qname)) < 0)
         {
             return ret;
         }
@@ -296,7 +296,7 @@ static int s_dns_build_resource(uint8_t* buff, size_t size, const nt_dns_resourc
     for (i = 0; i < n; i++)
     {
         const nt_dns_resource_t* r = &res[i];
-        if ((ret = s_dns_build_label(buff + offset, size - offset, &r->name)) < 0)
+        if ((ret = s_dns_build_label(buff + offset, size - offset, r->name)) < 0)
         {
             return ret;
         }
@@ -329,7 +329,7 @@ static nt_dns_question_t* s_dns_copy_question(const nt_dns_question_t* req, size
     for (i = 0; i < n; i++)
     {
         const nt_dns_question_t* q = &req[i];
-        nt_str_arr_copy(&new_req[i].qname, &q->qname);
+        new_req[i].qname = c_str_arr_dup(q->qname);
         new_req[i].qtype = q->qtype;
         new_req[i].qclass = q->qclass;
     }
@@ -345,7 +345,7 @@ static nt_dns_resource_t* s_dns_copy_resource(const nt_dns_resource_t* res, size
     for (i = 0; i < n; i++)
     {
         const nt_dns_resource_t* r = &res[i];
-        nt_str_arr_copy(&new_res[i].name, &r->name);
+        new_res[i].name = c_str_arr_dup(r->name);
         new_res[i].type = r->type;
         new_res[i].class = r->class;
         new_res[i].ttl = r->ttl;

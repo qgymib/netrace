@@ -38,7 +38,7 @@
 #define NT_UTILS_DNS_H
 
 #include <stdint.h>
-#include "utils/str.h"
+#include "utils/cstr.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -189,7 +189,7 @@ typedef struct nt_dns_question
     /**
      * @brief A domain name represented as a sequence of labels.
      */
-    nt_str_arr_t qname;
+    c_str_arr_t qname;
 
     /**
      * @brief A two octet code which specifies the type of the query.
@@ -212,7 +212,7 @@ typedef struct nt_dns_resource
     /**
      * @brief A domain name to which this resource record pertains.
      */
-    nt_str_arr_t name;
+    c_str_arr_t name;
 
     /**
      * @brief Two octets containing one of the RR type codes.

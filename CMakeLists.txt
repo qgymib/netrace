@@ -30,6 +30,7 @@ add_library(lib${PROJECT_NAME} STATIC
     "src/runtime/raw.c"
     "src/runtime/socks5.c"
     "src/utils/cmdoption.c"
+    "src/utils/cstr.c"
     "src/utils/dns.c"
     "src/utils/ipfilter.c"
     "src/utils/list.c"

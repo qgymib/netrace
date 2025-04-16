@@ -30,7 +30,7 @@
             i++;                                                                                   \
             val = argv[i];                                                                         \
         }                                                                                          \
-        continue;                                                                                  \
+        goto CONTINUE;                                                                             \
     } while (0)
 
 typedef struct log_level_pair
@@ -96,28 +96,6 @@ CMAKE_PROJECT_NAME " - Trace and redirect network traffic (" NT_VERSION ")\n"
 ;
 /* clang-format on */
 
-static void s_setup_cmdline_append_prog_args(nt_cmd_opt_t* opt, const char* arg)
-{
-    /* The first argument. */
-    if (opt->prog_args == NULL)
-    {
-        opt->prog_args = (char**)nt_malloc(sizeof(char*) * 2);
-        opt->prog_args[0] = nt_strdup(arg);
-        opt->prog_args[1] = NULL;
-        return;
-    }
-
-    /* More arguments. */
-    size_t prog_nargs = 0;
-    while (opt->prog_args[prog_nargs] != NULL)
-    {
-        prog_nargs++;
-    }
-    opt->prog_args = nt_realloc(opt->prog_args, sizeof(char*) * (prog_nargs + 2));
-    opt->prog_args[prog_nargs] = nt_strdup(arg);
-    opt->prog_args[prog_nargs + 1] = NULL;
-}
-
 static nt_log_level_t s_cmd_opt_parse_loglevel(const char* level)
 {
     static log_level_pair s_level[] = {
@@ -148,6 +126,9 @@ static nt_log_level_t s_cmd_opt_parse_loglevel(const char* level)
 void nt_cmd_opt_parse(nt_cmd_opt_t* opt, int argc, char** argv)
 {
     int         i, flag_prog_args = 0;
+    const char* opt_proxy = "socks5://" NT_DEFAULT_SOCKS5_ADDR ":" STRINGIFY(NT_DEFAULT_SOCKS5_PORT);
+    const char* opt_bypass = "default";
+    const char* opt_dns = NULL;
     const char* log_level = NULL;
     memset(opt, 0, sizeof(*opt));
 
@@ -155,13 +136,13 @@ void nt_cmd_opt_parse(nt_cmd_opt_t* opt, int argc, char** argv)
     {
         if (flag_prog_args)
         {
-            s_setup_cmdline_append_prog_args(opt, argv[i]);
+            opt->prog_args = c_str_arr_cat(opt->prog_args, argv[i]);
             continue;
         }
 
         if (argv[i][0] != '-')
         {
-            s_setup_cmdline_append_prog_args(opt, argv[i]);
+            opt->prog_args = c_str_arr_cat(opt->prog_args, argv[i]);
             flag_prog_args = 1;
             continue;
         }
@@ -172,12 +153,20 @@ void nt_cmd_opt_parse(nt_cmd_opt_t* opt, int argc, char** argv)
             exit(EXIT_SUCCESS);
         }
 
-        NT_CMD_PARSE_OPTION(opt->opt_proxy, "--proxy");
-        NT_CMD_PARSE_OPTION(opt->opt_bypass, "--bypass");
-        NT_CMD_PARSE_OPTION(opt->opt_dns, "--dns");
+        NT_CMD_PARSE_OPTION(opt_proxy, "--proxy");
+        NT_CMD_PARSE_OPTION(opt_bypass, "--bypass");
+        NT_CMD_PARSE_OPTION(opt_dns, "--dns");
         NT_CMD_PARSE_OPTION(log_level, "--loglevel");
+
+    CONTINUE:
     }
 
+    opt->opt_proxy = c_str_new(opt_proxy);
+    opt->opt_bypass = c_str_new(opt_bypass);
+    if (opt_dns != NULL)
+    {
+        opt->opt_dns = c_str_new(opt_dns);
+    }
     if (opt->prog_args == NULL)
     {
         LOG_E("Missing program path");
@@ -185,21 +174,14 @@ void nt_cmd_opt_parse(nt_cmd_opt_t* opt, int argc, char** argv)
     }
     if (opt->opt_proxy == NULL)
     {
-        opt->opt_proxy = "socks5://" NT_DEFAULT_SOCKS5_ADDR ":" STRINGIFY(NT_DEFAULT_SOCKS5_PORT);
-    }
-    if (opt->opt_bypass == NULL)
-    {
-        opt->opt_bypass = "default";
     }
     opt->log_level = s_cmd_opt_parse_loglevel(log_level);
 }
 
 void nt_cmd_opt_free(nt_cmd_opt_t* opt)
 {
-    size_t i;
-    for (i = 0; opt->prog_args != NULL && opt->prog_args[i] != NULL; i++)
-    {
-        nt_free(opt->prog_args[i]);
-    }
-    nt_free(opt->prog_args);
+    c_str_free(opt->opt_proxy);
+    c_str_free(opt->opt_bypass);
+    c_str_free(opt->opt_dns);
+    c_str_free(opt->prog_args);
 }
