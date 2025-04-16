@@ -44,6 +44,9 @@ static const char* s_help =
 CMAKE_PROJECT_NAME " - Trace and redirect network traffic (" NT_VERSION ")\n"
 "Usage: " CMAKE_PROJECT_NAME " [options] prog [prog-args]\n"
 "Options:\n"
+"  --pid=[pid]\n"
+"      Attach to process.\n"
+"\n"
 "  --proxy=socks5://[user[:pass]@][host[:port]]\n"
 "      Set socks5 address.\n"
 "\n"
@@ -130,6 +133,7 @@ void nt_cmd_opt_parse(nt_cmd_opt_t* opt, int argc, char** argv)
     const char* opt_bypass = "default";
     const char* opt_dns = NULL;
     const char* log_level = NULL;
+    const char* opt_pid = NULL;
     memset(opt, 0, sizeof(*opt));
 
     for (i = 1; i < argc; i++)
@@ -157,6 +161,10 @@ void nt_cmd_opt_parse(nt_cmd_opt_t* opt, int argc, char** argv)
         NT_CMD_PARSE_OPTION(opt_bypass, "--bypass");
         NT_CMD_PARSE_OPTION(opt_dns, "--dns");
         NT_CMD_PARSE_OPTION(log_level, "--loglevel");
+        NT_CMD_PARSE_OPTION(opt_pid, "--pid");
+
+        LOG_E("Unknown option `%s`.", argv[i]);
+        exit(EXIT_FAILURE);
 
     CONTINUE:
     }
@@ -169,13 +177,19 @@ void nt_cmd_opt_parse(nt_cmd_opt_t* opt, int argc, char** argv)
     }
     if (opt->prog_args == NULL)
     {
-        LOG_E("Missing program path");
+        LOG_E("Missing program path.");
         exit(EXIT_FAILURE);
     }
-    if (opt->opt_proxy == NULL)
-    {
-    }
     opt->log_level = s_cmd_opt_parse_loglevel(log_level);
+    if (opt_pid != NULL)
+    {
+        opt->pid = nt_malloc(sizeof(*opt->pid));
+        if (sscanf(opt_pid, "%d", opt->pid) != 1)
+        {
+            LOG_E("Invalid value for option `--pid`.");
+            exit(EXIT_FAILURE);
+        }
+    }
 }
 
 void nt_cmd_opt_free(nt_cmd_opt_t* opt)
@@ -184,4 +198,5 @@ void nt_cmd_opt_free(nt_cmd_opt_t* opt)
     c_str_free(opt->opt_bypass);
     c_str_free(opt->opt_dns);
     c_str_free(opt->prog_args);
+    nt_free(opt->pid);
 }

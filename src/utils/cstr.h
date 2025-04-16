@@ -53,6 +53,15 @@ c_str_t c_str_new(const char* s);
 c_str_t c_str_new_len(const char* s, size_t n);
 
 /**
+ * @brief Catenates string \p s into string \p cs.
+ * @param[in] cs String.
+ * @param[in] s Source string.
+ * @param[in] n String length in bytes.
+ * @return New string.
+ */
+c_str_t c_str_cat_len(c_str_t cs, const char* s, size_t n);
+
+/**
  * @brief Create a new string array.
  * @return String array.
  */

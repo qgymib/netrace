@@ -10,10 +10,11 @@ extern "C" {
 
 typedef struct nt_cmd_opt
 {
+    nt_log_level_t log_level;  /* --loglevel */
     c_str_t        opt_proxy;  /* --proxy */
     c_str_t        opt_bypass; /* --bypass */
     c_str_t        opt_dns;    /* --dns */
-    nt_log_level_t log_level;  /* --loglevel */
+    pid_t*         pid;        /* --pid */
     c_str_arr_t    prog_args;  /* Arguments for child program, ending with NULL. */
 } nt_cmd_opt_t;
 

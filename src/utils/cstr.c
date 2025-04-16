@@ -127,6 +127,22 @@ c_str_t c_str_new_len(const char* s, size_t n)
     return str->header.data;
 }
 
+c_str_t c_str_cat_len(c_str_t cs, const char* s, size_t n)
+{
+    c_str_string_t* str = CSTR_STRING(cs);
+    size_t          new_sz = str->size + n;
+    size_t          malloc_sz = sizeof(c_str_string_t) + new_sz + 1;
+    c_str_string_t* new_str = s_realloc(str, malloc_sz);
+    if (new_str == NULL)
+    {
+        return NULL;
+    }
+    memcpy(new_str->header.data + new_str->size, s, n);
+    new_str->size = new_sz;
+    new_str->header.data[new_sz] = '\0';
+    return new_str->header.data;
+}
+
 c_str_arr_t c_str_arr_new(void)
 {
     size_t         malloc_sz = sizeof(c_str_array_t) + sizeof(c_str_t);
