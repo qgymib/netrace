@@ -33,17 +33,14 @@
         goto CONTINUE;                                                                             \
     } while (0)
 
-typedef struct log_level_pair
-{
-    const char*    str;
-    nt_log_level_t level;
-} log_level_pair;
-
 /* clang-format off */
 static const char* s_help =
 CMAKE_PROJECT_NAME " - Trace and redirect network traffic (" NT_VERSION ")\n"
 "Usage: " CMAKE_PROJECT_NAME " [options] prog [prog-args]\n"
 "Options:\n"
+"  --config=[path]\n"
+"      Set configuration file path to load.\n"
+"\n"
 "  --proxy=socks5://[user[:pass]@][host[:port]]\n"
 "      Set socks5 address.\n"
 "\n"
@@ -96,42 +93,16 @@ CMAKE_PROJECT_NAME " - Trace and redirect network traffic (" NT_VERSION ")\n"
 ;
 /* clang-format on */
 
-static nt_log_level_t s_cmd_opt_parse_loglevel(const char* level)
-{
-    static log_level_pair s_level[] = {
-        { "debug", NT_LOG_DEBUG },
-        { "info",  NT_LOG_INFO  },
-        { "warn",  NT_LOG_WARN  },
-        { "error", NT_LOG_ERROR },
-    };
 
-    if (level == NULL)
-    {
-        return NT_LOG_INFO;
-    }
-
-    size_t i;
-    for (i = 0; i < ARRAY_SIZE(s_level); i++)
-    {
-        if (strcasecmp(s_level[i].str, level) == 0)
-        {
-            return s_level[i].level;
-        }
-    }
-
-    fprintf(stderr, "Unknown log level '%s'\n.", level);
-    exit(EXIT_FAILURE);
-}
 
 void nt_cmd_opt_parse(nt_cmd_opt_t* opt, int argc, char** argv)
 {
     int         i, flag_prog_args = 0;
-    const char* opt_proxy =
-        "socks5://" NT_DEFAULT_SOCKS5_ADDR ":" STRINGIFY(NT_DEFAULT_SOCKS5_PORT);
-    const char* opt_bypass = "default";
+    const char* opt_proxy = NULL;
+    const char* opt_bypass = NULL;
     const char* opt_dns = NULL;
+    const char* opt_config = NULL;
     const char* log_level = NULL;
-    memset(opt, 0, sizeof(*opt));
 
     for (i = 1; i < argc; i++)
     {
@@ -157,6 +128,7 @@ void nt_cmd_opt_parse(nt_cmd_opt_t* opt, int argc, char** argv)
         NT_CMD_PARSE_OPTION(opt_proxy, "--proxy");
         NT_CMD_PARSE_OPTION(opt_bypass, "--bypass");
         NT_CMD_PARSE_OPTION(opt_dns, "--dns");
+        NT_CMD_PARSE_OPTION(opt_config, "--config");
         NT_CMD_PARSE_OPTION(log_level, "--loglevel");
 
         LOG_E("Unknown option `%s`.", argv[i]);
@@ -165,27 +137,23 @@ void nt_cmd_opt_parse(nt_cmd_opt_t* opt, int argc, char** argv)
     CONTINUE:
     }
 
-    opt->opt_proxy = c_str_new(opt_proxy);
-    opt->opt_bypass = c_str_new(opt_bypass);
-    if (opt_dns != NULL)
-    {
-        opt->opt_dns = c_str_new(opt_dns);
-    }
+    opt->proxy = (opt_proxy != NULL) ? c_str_new(opt_proxy) : NULL;
+    opt->bypass = (opt_bypass != NULL) ? c_str_new(opt_bypass) : NULL;
+    opt->dns = (opt_dns != NULL) ? c_str_new(opt_dns) : NULL;
+    opt->config = (opt_config != NULL) ? c_str_new(opt_config) : NULL;
+    opt->loglevel = log_level != NULL ? c_str_new(log_level) : NULL;
     if (opt->prog_args == NULL)
     {
         LOG_E("Missing program path");
         exit(EXIT_FAILURE);
     }
-    if (opt->opt_proxy == NULL)
-    {
-    }
-    opt->log_level = s_cmd_opt_parse_loglevel(log_level);
 }
 
 void nt_cmd_opt_free(nt_cmd_opt_t* opt)
 {
-    c_str_free(opt->opt_proxy);
-    c_str_free(opt->opt_bypass);
-    c_str_free(opt->opt_dns);
+    c_str_free(opt->proxy);
+    c_str_free(opt->bypass);
+    c_str_free(opt->dns);
+    c_str_free(opt->config);
     c_str_free(opt->prog_args);
 }

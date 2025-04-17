@@ -83,15 +83,12 @@ typedef struct prog_node
 
 typedef struct runtime
 {
-
-
     nt_proxy_t*     proxy; /* Proxy object. */
     nt_ipfilter_t*  ipfilter;
     nt_dns_proxy_t* dns;
-    int dns_chid;
+    int             dns_chid;
 
-
-    pid_t    prog_pid;         /* First child pid. */
+    pid_t prog_pid; /* First child pid. */
 
     int      prog_exit_retval; /* First child exit code. */
     ev_map_t prog_map;         /* Program tracing map. Type: #prog_node_t. */
@@ -106,38 +103,11 @@ extern const nt_proxy_protocol_t nt_proxy_protocol_raw;
 extern const nt_proxy_protocol_t nt_proxy_protocol_socks5;
 
 /**
- * @brief Initialize global runtime.
- * @param[in] argc  Argument count.
- * @param[in] argv  Argument list.
+ * @brief Program entrypoint.
+ * @param[in] opt   Options.
+ * @return 0 if success.
  */
-void nt_runtime_init(const nt_cmd_opt_t* opt, pid_t pid);
-
-/**
- * @brief Cleanup runtime.
- */
-void nt_runtime_cleanup(void);
-
-/**
- * @brief Release program node.
- * @warning The node must already removed from #runtime_t::prog_map.
- * @param[in] prog Program node.
- */
-void nt_prog_node_release(prog_node_t* prog);
-
-/**
- * @brief Release socket node.
- * @warning The node must already removed from #prog_node_t::sock_map.
- * @param[in] prog Program node.
- */
-void nt_sock_node_release(sock_node_t* sock);
-
-/**
- * @brief Create a proxy object.
- * @param[out] proxy Proxy object.
- * @param[in] url Url.
- * @return 0 if success, errno if failed.
- */
-int nt_proxy_create(nt_proxy_t** proxy, const char* url);
+int nt_run(const nt_cmd_opt_t* opt);
 
 #ifdef __cplusplus
 }

@@ -32,6 +32,7 @@ add_library(lib${PROJECT_NAME} STATIC
     "src/utils/cmdoption.c"
     "src/utils/cstr.c"
     "src/utils/dns.c"
+    "src/utils/file.c"
     "src/utils/ipfilter.c"
     "src/utils/list.c"
     "src/utils/log.c"
@@ -60,6 +61,13 @@ add_executable(${PROJECT_NAME}
 )
 setup_target_wall(${PROJECT_NAME})
 target_link_libraries(${PROJECT_NAME} PRIVATE lib${PROJECT_NAME})
+
+###############################################################################
+# 3rd
+###############################################################################
+
+include(third_party/cJSON.cmake)
+target_link_libraries(${PROJECT_NAME} PRIVATE cJSON)
 
 ###############################################################################
 # Build test

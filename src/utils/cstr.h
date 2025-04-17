@@ -45,12 +45,46 @@ void c_str_free(void* p);
 c_str_t c_str_new(const char* s);
 
 /**
+ * @brief Duplicate string.
+ * @param[in] s Source string.
+ * @return New string.
+ */
+c_str_t c_str_dup(const c_str_t s);
+
+/**
  * @brief Create new string.
  * @param[in] s C string.
  * @param[in] n String length in bytes.
  * @return String.
  */
 c_str_t c_str_new_len(const char* s, size_t n);
+
+/**
+ * @brief Catenates string \p s into string \p cs.
+ * @param[in] cs String.
+ * @param[in] s Source string.
+ * @return New string.
+ */
+c_str_t c_str_cat(c_str_t cs, const char* s);
+
+/**
+ * @brief Catenates string \p s into string \p cs.
+ * @param[in] cs String.
+ * @param[in] s Source string.
+ * @param[in] n String length in bytes.
+ * @return New string.
+ */
+c_str_t c_str_cat_len(c_str_t cs, const char* s, size_t n);
+
+/**
+ * @brief Get substring.
+ * @param[in] cs  Source string.
+ * @param[in] pos Start position. If pos is larger than content length in \p cs, an empty string is
+ *   returned.
+ * @param[in] n   Max bytes.
+ * @return  New string.
+ */
+c_str_t c_str_substr(const c_str_t cs, size_t pos, size_t n);
 
 /**
  * @brief Create a new string array.

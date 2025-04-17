@@ -26,6 +26,10 @@
 #endif
 #endif
 
+#ifndef min
+#define min(a, b) (((a) < (b)) ? (a) : (b))
+#endif
+
 #define CSTR_MAGIC 0x5ca8
 
 typedef enum c_str_type
@@ -107,6 +111,19 @@ c_str_t c_str_new(const char* s)
     return c_str_new_len(s, n);
 }
 
+c_str_t c_str_dup(const c_str_t s)
+{
+    c_str_string_t* str = CSTR_STRING(s);
+    size_t          malloc_sz = sizeof(c_str_string_t) + str->size + 1;
+    c_str_string_t* dup = s_realloc(NULL, malloc_sz);
+    if (dup == NULL)
+    {
+        return NULL;
+    }
+    memcpy(dup, str, malloc_sz);
+    return dup->header.data;
+}
+
 c_str_t c_str_new_len(const char* s, size_t n)
 {
     size_t          malloc_sz = sizeof(c_str_string_t) + n + 1;
@@ -125,6 +142,41 @@ c_str_t c_str_new_len(const char* s, size_t n)
     str->header.data[n] = '\0';
 
     return str->header.data;
+}
+
+c_str_t c_str_cat(c_str_t cs, const char* s)
+{
+    return c_str_cat_len(cs, s, strlen(s));
+}
+
+c_str_t c_str_cat_len(c_str_t cs, const char* s, size_t n)
+{
+    c_str_string_t* str = CSTR_STRING(cs);
+    size_t          new_sz = str->size + n;
+    size_t          malloc_sz = sizeof(c_str_string_t) + new_sz + 1;
+    c_str_string_t* new_str = s_realloc(str, malloc_sz);
+    if (new_str == NULL)
+    {
+        return NULL;
+    }
+    memcpy(new_str->header.data + new_str->size, s, n);
+    new_str->size = new_sz;
+    new_str->header.data[new_sz] = '\0';
+    return new_str->header.data;
+}
+
+c_str_t c_str_substr(const c_str_t cs, size_t pos, size_t n)
+{
+    size_t cs_len = c_str_len(cs);
+    if (pos >= cs_len)
+    {
+        return c_str_new_len("", 0);
+    }
+    const char* start = cs + pos;
+    size_t      copy_sz = cs_len - pos;
+    copy_sz = min(copy_sz, n);
+
+    return c_str_new_len(start, copy_sz);
 }
 
 c_str_arr_t c_str_arr_new(void)

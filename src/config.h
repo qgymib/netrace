@@ -15,6 +15,8 @@
 #define NT_DEFAULT_SOCKS5_PORT 1080
 #endif
 
+#define NT_DEFAULT_PROXY "socks5://" NT_DEFAULT_SOCKS5_ADDR ":" STRINGIFY(NT_DEFAULT_SOCKS5_PORT)
+
 /**
  * @brief Default socket buffer size.
  */
@@ -27,6 +29,10 @@
  */
 #ifndef NT_DNS_QUERY_TIMEOUT
 #define NT_DNS_QUERY_TIMEOUT 60
+#endif
+
+#ifndef NT_PROGRAM_NAMESPACE
+#define NT_PROGRAM_NAMESPACE "io.github.qgymib.netrace"
 #endif
 
 #endif
