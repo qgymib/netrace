@@ -88,8 +88,7 @@ typedef struct runtime
     nt_dns_proxy_t* dns;
     int             dns_chid;
 
-    pid_t prog_pid; /* First child pid. */
-
+    pid_t    prog_pid;         /* First child pid. */
     int      prog_exit_retval; /* First child exit code. */
     ev_map_t prog_map;         /* Program tracing map. Type: #prog_node_t. */
 } runtime_t;

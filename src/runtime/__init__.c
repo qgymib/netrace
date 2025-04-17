@@ -83,7 +83,36 @@ static int do_child(const nt_cmd_opt_t* opt, int prog_pipe[2])
     if (ptrace(PTRACE_TRACEME, 0, NULL, NULL) < 0)
     {
         code = errno;
-        write(prog_pipe[1], &code, sizeof(code));
+        goto RAISE_ERROR;
+    }
+
+    if (opt->uid != NULL)
+    {
+        unsigned uid = 0;
+        if (sscanf(opt->uid, "%u", &uid) != 1)
+        {
+            code = EINVAL;
+            goto RAISE_ERROR;
+        }
+        if (setuid(uid) < 0)
+        {
+            code = errno;
+            goto RAISE_ERROR;
+        }
+    }
+    if (opt->gid != NULL)
+    {
+        unsigned gid = 0;
+        if (sscanf(opt->gid, "%u", &gid) != 1)
+        {
+            code = EINVAL;
+            goto RAISE_ERROR;
+        }
+        if (setgid(gid) < 0)
+        {
+            code = errno;
+            goto RAISE_ERROR;
+        }
     }
 
     /*
@@ -95,9 +124,10 @@ static int do_child(const nt_cmd_opt_t* opt, int prog_pipe[2])
     if (execvp(opt->prog_args[0], opt->prog_args) < 0)
     {
         code = errno;
-        write(prog_pipe[1], &code, sizeof(code));
     }
 
+RAISE_ERROR:
+    write(prog_pipe[1], &code, sizeof(code));
     return EXIT_FAILURE;
 }
 
@@ -148,9 +178,9 @@ static void s_trace_syscall_socket_enter(prog_node_t* prog)
     sock_node_t* sock = nt_calloc(1, sizeof(sock_node_t));
     sock->fd = -1;
     sock->channel = -1;
-    sock->domain = nt_syscall_get_arg(prog->pid, 0);
-    sock->type = nt_syscall_get_arg(prog->pid, 1) & 0xFF;
-    sock->protocol = nt_syscall_get_arg(prog->pid, 2);
+    sock->domain = (int)nt_syscall_get_arg(prog->pid, 0);
+    sock->type = (int)nt_syscall_get_arg(prog->pid, 1) & 0xFF;
+    sock->protocol = (int)nt_syscall_get_arg(prog->pid, 2);
 
     /* clang-format off */
     NT_ASSERT(ev_map_insert(&prog->sock_map, &sock->node) == NULL,
@@ -181,7 +211,7 @@ static void s_trace_syscall_socket_leave(prog_node_t* prog)
 
     /* Update fd. */
     ev_map_erase(&prog->sock_map, &sock->node);
-    if ((sock->fd = nt_syscall_get_ret(prog->pid)) < 0)
+    if ((sock->fd = (int)nt_syscall_get_ret(prog->pid)) < 0)
     {
         LOG_D("pid=%d ignore socket=%d domain=%d type=%d protocol=%d.", prog->pid, sock->fd,
               sock->domain, sock->type, sock->protocol);
@@ -210,7 +240,7 @@ static sock_node_t* s_prog_search_sock(prog_node_t* prog, int fd)
 
 static void s_trace_syscall_close_enter(prog_node_t* prog)
 {
-    int          fd = nt_syscall_get_arg(prog->pid, 0);
+    int          fd = (int)nt_syscall_get_arg(prog->pid, 0);
     sock_node_t* sock = s_prog_search_sock(prog, fd);
     if (sock == NULL)
     {
@@ -223,7 +253,7 @@ static void s_trace_syscall_close_enter(prog_node_t* prog)
 
 static void s_trace_syscall_connect_enter(prog_node_t* prog)
 {
-    int          fd = nt_syscall_get_arg(prog->pid, 0);
+    int          fd = (int)nt_syscall_get_arg(prog->pid, 0);
     sock_node_t* sock = s_prog_search_sock(prog, fd);
     if (sock == NULL)
     {
@@ -328,7 +358,7 @@ static void s_trace_syscall(prog_node_t* info)
 {
     if (!info->b_in_syscall)
     {
-        info->syscall = nt_syscall_get_id(info->pid);
+        info->syscall = (int)nt_syscall_get_id(info->pid);
 
     SYSCALL_ENTER:
         info->b_in_syscall = 1;
@@ -336,7 +366,7 @@ static void s_trace_syscall(prog_node_t* info)
     }
     else
     {
-        int syscall = nt_syscall_get_id(info->pid);
+        int syscall = (int)nt_syscall_get_id(info->pid);
         if (syscall != info->syscall)
         {
             LOG_D("syscall mismatch: pid=%d old=%d new=%d.", info->pid, info->syscall, syscall);
@@ -558,7 +588,7 @@ static int s_setup_ipfilter_add_rule(const nt_cmd_opt_t* opt, const char* str)
 
 static int s_setup_ipfilter(const nt_cmd_opt_t* opt)
 {
-    int ret = 0;
+    int         ret = 0;
     const char* bypass = opt->bypass != NULL ? opt->bypass : "default";
     G->ipfilter = nt_ipfilter_create();
 

@@ -9,11 +9,13 @@ extern "C" {
 
 typedef struct nt_cmd_opt
 {
-    c_str_t     proxy;     /* --proxy */
     c_str_t     bypass;    /* --bypass */
-    c_str_t     dns;       /* --dns */
     c_str_t     config;    /* --config */
+    c_str_t     dns;       /* --dns */
+    c_str_t     gid;       /* --gid */
     c_str_t     loglevel;  /* --loglevel */
+    c_str_t     proxy;     /* --proxy */
+    c_str_t     uid;       /* --uid */
     c_str_arr_t prog_args; /* Arguments for child program, ending with NULL. */
 } nt_cmd_opt_t;
 

@@ -38,18 +38,6 @@ static const char* s_help =
 CMAKE_PROJECT_NAME " - Trace and redirect network traffic (" NT_VERSION ")\n"
 "Usage: " CMAKE_PROJECT_NAME " [options] prog [prog-args]\n"
 "Options:\n"
-"  --config=[path]\n"
-"      Set configuration file path to load.\n"
-"\n"
-"  --proxy=socks5://[user[:pass]@][host[:port]]\n"
-"      Set socks5 address.\n"
-"\n"
-"  --dns=udp://ip[:port]\n"
-"      End DNS redirection. If this option is enabled, " CMAKE_PROJECT_NAME " start a builtin\n"
-"      DNS proxy, and redirect DNS request to the server.\n"
-"\n"
-"      The `port` is optional. If it is not set, treat as `53`.\n"
-"\n"
 "  --bypass=RULE_LIST\n"
 "      Syntax:\n"
 "        RULE_LIST    := [RULE[,RULE,...]]\n"
@@ -85,24 +73,42 @@ CMAKE_PROJECT_NAME " - Trace and redirect network traffic (" NT_VERSION ")\n"
 "            In addition to the default rules, ignore all IPv4 UDP transmissions,\n"
 "            ignore all IPv6 UDP transmissions whose destination port is 53.\n"
 "\n"
-"  --loglevel=[debug|info|warn|error]\n"
-"      Set log level, case insensitive. By default set to `info`.\n"
+"  --config=[path]\n"
+"      Set configuration file path to load.\n"
+"\n"
+"  --dns=udp://ip[:port]\n"
+"      End DNS redirection. If this option is enabled, " CMAKE_PROJECT_NAME " start a builtin\n"
+"      DNS proxy, and redirect DNS request to the server.\n"
+"\n"
+"      The `port` is optional. If it is not set, treat as `53`.\n"
+"\n"
+"  --gid=[gid]\n"
+"      Set group ID.\n"
 "\n"
 "  -h, --help\n"
 "      Show this help and exit.\n"
+"\n"
+"  --loglevel=[debug|info|warn|error]\n"
+"      Set log level, case insensitive. By default set to `info`.\n"
+"\n"
+"  --proxy=socks5://[user[:pass]@][host[:port]]\n"
+"      Set socks5 address.\n"
+"\n"
+"  --uid=[uid]\n"
+"      Set user ID.\n"
 ;
 /* clang-format on */
-
-
 
 void nt_cmd_opt_parse(nt_cmd_opt_t* opt, int argc, char** argv)
 {
     int         i, flag_prog_args = 0;
-    const char* opt_proxy = NULL;
     const char* opt_bypass = NULL;
-    const char* opt_dns = NULL;
     const char* opt_config = NULL;
+    const char* opt_dns = NULL;
+    const char* opt_gid = NULL;
     const char* log_level = NULL;
+    const char* opt_proxy = NULL;
+    const char* opt_uid = NULL;
 
     for (i = 1; i < argc; i++)
     {
@@ -125,11 +131,13 @@ void nt_cmd_opt_parse(nt_cmd_opt_t* opt, int argc, char** argv)
             exit(EXIT_SUCCESS);
         }
 
-        NT_CMD_PARSE_OPTION(opt_proxy, "--proxy");
         NT_CMD_PARSE_OPTION(opt_bypass, "--bypass");
-        NT_CMD_PARSE_OPTION(opt_dns, "--dns");
         NT_CMD_PARSE_OPTION(opt_config, "--config");
+        NT_CMD_PARSE_OPTION(opt_dns, "--dns");
+        NT_CMD_PARSE_OPTION(opt_gid, "--gid");
         NT_CMD_PARSE_OPTION(log_level, "--loglevel");
+        NT_CMD_PARSE_OPTION(opt_proxy, "--proxy");
+        NT_CMD_PARSE_OPTION(opt_uid, "--uid");
 
         LOG_E("Unknown option `%s`.", argv[i]);
         exit(EXIT_FAILURE);
@@ -137,11 +145,13 @@ void nt_cmd_opt_parse(nt_cmd_opt_t* opt, int argc, char** argv)
     CONTINUE:
     }
 
-    opt->proxy = (opt_proxy != NULL) ? c_str_new(opt_proxy) : NULL;
     opt->bypass = (opt_bypass != NULL) ? c_str_new(opt_bypass) : NULL;
-    opt->dns = (opt_dns != NULL) ? c_str_new(opt_dns) : NULL;
     opt->config = (opt_config != NULL) ? c_str_new(opt_config) : NULL;
-    opt->loglevel = log_level != NULL ? c_str_new(log_level) : NULL;
+    opt->dns = (opt_dns != NULL) ? c_str_new(opt_dns) : NULL;
+    opt->gid = (opt_gid != NULL) ? c_str_new(opt_gid) : NULL;
+    opt->proxy = (opt_proxy != NULL) ? c_str_new(opt_proxy) : NULL;
+    opt->loglevel = (log_level != NULL) ? c_str_new(log_level) : NULL;
+    opt->uid = (opt_uid != NULL) ? c_str_new(opt_uid) : NULL;
     if (opt->prog_args == NULL)
     {
         LOG_E("Missing program path");
@@ -151,9 +161,12 @@ void nt_cmd_opt_parse(nt_cmd_opt_t* opt, int argc, char** argv)
 
 void nt_cmd_opt_free(nt_cmd_opt_t* opt)
 {
-    c_str_free(opt->proxy);
     c_str_free(opt->bypass);
-    c_str_free(opt->dns);
     c_str_free(opt->config);
+    c_str_free(opt->dns);
+    c_str_free(opt->gid);
+    c_str_free(opt->loglevel);
+    c_str_free(opt->proxy);
+    c_str_free(opt->uid);
     c_str_free(opt->prog_args);
 }

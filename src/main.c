@@ -42,10 +42,12 @@ static int s_fill_option_from_file(nt_cmd_opt_t* opt, const char* path)
         return NT_ERR(EPROTO);
     }
 
-    FILL_STRING_FROM_JSON(proxy);
     FILL_STRING_FROM_JSON(bypass);
     FILL_STRING_FROM_JSON(dns);
+    FILL_STRING_FROM_JSON(gid);
     FILL_STRING_FROM_JSON(loglevel);
+    FILL_STRING_FROM_JSON(proxy);
+    FILL_STRING_FROM_JSON(uid);
 
     cJSON_Delete(json);
     return 0;
