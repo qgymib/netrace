@@ -151,7 +151,10 @@ int main(int argc, char* argv[])
     nt_cmd_opt_parse(&options, argc, argv);
 
     /* Respect options from configuration file. */
-    s_append_from_config_file(&options);
+    if (!options.clean)
+    {
+        s_append_from_config_file(&options);
+    }
 
     /* Run */
     ret = nt_run(&options);

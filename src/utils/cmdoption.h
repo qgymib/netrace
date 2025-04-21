@@ -16,6 +16,7 @@ typedef struct nt_cmd_opt
     c_str_t     loglevel;  /* --loglevel */
     c_str_t     proxy;     /* --proxy */
     c_str_t     uid;       /* --uid */
+    int         clean;     /* --clean */
     c_str_arr_t prog_args; /* Arguments for child program, ending with NULL. */
 } nt_cmd_opt_t;
 

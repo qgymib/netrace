@@ -33,6 +33,18 @@
         goto CONTINUE;                                                                             \
     } while (0)
 
+#define NT_CMD_CHECK_OPTION(val, opt)                                                              \
+    do                                                                                             \
+    {                                                                                              \
+        const char* _opt = (opt);                                                                  \
+        if (strcmp(argv[i], _opt) != 0)                                                            \
+        {                                                                                          \
+            break;                                                                                 \
+        }                                                                                          \
+        val = 1;                                                                                   \
+        goto CONTINUE;                                                                             \
+    } while (0)
+
 /* clang-format off */
 static const char* s_help =
 CMAKE_PROJECT_NAME " - Trace and redirect network traffic (" NT_VERSION ")\n"
@@ -74,7 +86,15 @@ CMAKE_PROJECT_NAME " - Trace and redirect network traffic (" NT_VERSION ")\n"
 "            ignore all IPv6 UDP transmissions whose destination port is 53.\n"
 "\n"
 "  --config=[path]\n"
-"      Set configuration file path to load.\n"
+"      Set configuration file path to load. If not set, use the following search\n"
+"      order:\n"
+"      + `config.json` in the same path as program.\n"
+"      + `$XDG_CONFIG_HOME/" NT_PROGRAM_NAMESPACE "/config.json`\n"
+"      + `$HOME/.config/" NT_PROGRAM_NAMESPACE "/config.json`\n"
+"      + `/etc/" NT_PROGRAM_NAMESPACE "/config.json`\n"
+"\n"
+"  --clean\n"
+"      Do not load any configuration file.\n"
 "\n"
 "  --dns=udp://ip[:port]\n"
 "      End DNS redirection. If this option is enabled, " CMAKE_PROJECT_NAME " start a builtin\n"
@@ -138,6 +158,8 @@ void nt_cmd_opt_parse(nt_cmd_opt_t* opt, int argc, char** argv)
         NT_CMD_PARSE_OPTION(log_level, "--loglevel");
         NT_CMD_PARSE_OPTION(opt_proxy, "--proxy");
         NT_CMD_PARSE_OPTION(opt_uid, "--uid");
+
+        NT_CMD_CHECK_OPTION(opt->clean, "--clean");
 
         LOG_E("Unknown option `%s`.", argv[i]);
         exit(EXIT_FAILURE);
