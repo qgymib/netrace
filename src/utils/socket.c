@@ -7,6 +7,12 @@
 #include "utils/defs.h"
 #include "utils/socket.h"
 
+typedef struct nt_socket__name
+{
+    int         domain;
+    const char* name;
+} nt_socket_domain_name_t;
+
 int nt_ip_addr(const char* ip, uint16_t port, struct sockaddr* addr)
 {
     int ret;
@@ -352,4 +358,68 @@ int nt_socket_connect(int type, const struct sockaddr_storage* addr, int nonbloc
 
     close(fd);
     return NT_ERR(ret);
+}
+
+const char* nt_socket_domain_name(int domain)
+{
+    static const nt_socket_domain_name_t s_name[] = {
+        { AF_UNIX,      "AF_UNIX"      },
+        { AF_LOCAL,     "AF_LOCAL"     },
+        { AF_INET,      "AF_INET"      },
+        { AF_AX25,      "AF_AX25"      },
+        { AF_IPX,       "AF_IPX"       },
+        { AF_APPLETALK, "AF_APPLETALK" },
+        { AF_X25,       "AF_X25"       },
+        { AF_INET6,     "AF_INET6"     },
+        { AF_DECnet,    "AF_DECnet"    },
+        { AF_KEY,       "AF_KEY"       },
+        { AF_NETLINK,   "AF_NETLINK"   },
+        { AF_PACKET,    "AF_PACKET"    },
+        { AF_RDS,       "AF_RDS"       },
+        { AF_PPPOX,     "AF_PPPOX"     },
+        { AF_LLC,       "AF_LLC"       },
+        { AF_IB,        "AF_IB"        },
+        { AF_MPLS,      "AF_MPLS"      },
+        { AF_CAN,       "AF_CAN"       },
+        { AF_TIPC,      "AF_TIPC"      },
+        { AF_BLUETOOTH, "AF_BLUETOOTH" },
+        { AF_ALG,       "AF_ALG"       },
+        { AF_VSOCK,     "AF_VSOCK"     },
+        { AF_KCM,       "AF_KCM"       },
+        { AF_XDP,       "AF_XDP"       },
+    };
+
+    size_t i;
+    for (i = 0; i < ARRAY_SIZE(s_name); i++)
+    {
+        if (s_name[i].domain == domain)
+        {
+            return s_name[i].name;
+        }
+    }
+
+    return "unknown";
+}
+
+const char* nt_socket_type_name(int type)
+{
+    static const nt_socket_domain_name_t s_name[] = {
+        { SOCK_STREAM,    "SOCK_STREAM"    },
+        { SOCK_DGRAM,     "SOCK_DGRAM"     },
+        { SOCK_SEQPACKET, "SOCK_SEQPACKET" },
+        { SOCK_RAW,       "SOCK_RAW"       },
+        { SOCK_RDM,       "SOCK_RDM"       },
+        { SOCK_PACKET,    "SOCK_PACKET"    },
+    };
+
+    size_t i;
+    for (i = 0; i < ARRAY_SIZE(s_name); i++)
+    {
+        if (s_name[i].domain == type)
+        {
+            return s_name[i].name;
+        }
+    }
+
+    return "unknown";
 }

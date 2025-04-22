@@ -4,7 +4,7 @@
 #include <sys/time.h>
 #include "log.h"
 
-static const char*    s_log_str[] = { "D", "I", "W", "E" };
+static const char*    s_log_str[] = { "T", "D", "I", "W", "E" };
 static nt_log_level_t s_log_level = NT_LOG_INFO;
 
 static char _ev_ascii_to_char(unsigned char c)

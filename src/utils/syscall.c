@@ -142,7 +142,7 @@ void nt_syscall_set_arg(pid_t pid, size_t idx, long val)
 
 #endif
 
-void nt_syscall_getdata(pid_t pid, long addr, void* dst, size_t len)
+void nt_syscall_getdata(pid_t pid, uintptr_t addr, void* dst, size_t len)
 {
     size_t         read_sz = 0;
     syscall_word_t word;
@@ -162,7 +162,7 @@ void nt_syscall_getdata(pid_t pid, long addr, void* dst, size_t len)
     }
 }
 
-void nt_syscall_setdata(pid_t pid, long addr, const void* src, size_t len)
+void nt_syscall_setdata(pid_t pid, uintptr_t addr, const void* src, size_t len)
 {
     size_t         write_sz = 0;
     syscall_word_t word;
@@ -182,27 +182,42 @@ void nt_syscall_setdata(pid_t pid, long addr, const void* src, size_t len)
     }
 }
 
-long nt_syscall_get_sockaddr(pid_t pid, int arg, struct sockaddr_storage* data)
+int nt_syscall_get_sockaddr(pid_t pid, uintptr_t addr, struct sockaddr_storage* data, size_t size)
 {
     const size_t sockv4_len = sizeof(struct sockaddr_in);
     const size_t sockv6_len = sizeof(struct sockaddr_in6);
-    long         p_addr = nt_syscall_get_arg(pid, arg);
+
+    if (size < sockv4_len)
+    {
+        return NT_ERR(EINVAL);
+    }
 
     /* Try get IPv4 address. */
-    nt_syscall_getdata(pid, p_addr, data, sockv4_len);
+    nt_syscall_getdata(pid, addr, data, sockv4_len);
 
     if (data->ss_family == AF_INET6)
     {
-        nt_syscall_getdata(pid, p_addr, data, sockv6_len);
+        if (size < sockv6_len)
+        {
+            return NT_ERR(EINVAL);
+        }
+
+        nt_syscall_getdata(pid, addr, data, sockv6_len);
     }
 
-    return p_addr;
+    return 0;
 }
 
-void nt_syscall_set_sockaddr(pid_t pid, long addr, const struct sockaddr_storage* data)
+int nt_syscall_set_sockaddr(pid_t pid, uintptr_t addr, const struct sockaddr_storage* data, size_t size)
 {
     const size_t sockv4_len = sizeof(struct sockaddr_in);
     const size_t sockv6_len = sizeof(struct sockaddr_in6);
     size_t       write_sz = data->ss_family == AF_INET ? sockv4_len : sockv6_len;
+    if (size < write_sz)
+    {
+        return NT_ERR(EINVAL);
+    }
+
     nt_syscall_setdata(pid, addr, data, write_sz);
+    return 0;
 }

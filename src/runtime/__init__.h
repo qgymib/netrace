@@ -2,6 +2,7 @@
 #define NT_RUNTIME_H
 
 #include "dns.h"
+#include "trace/__init__.h"
 #include "utils/map.h"
 #include "utils/urlparser.h"
 #include "utils/ipfilter.h"
@@ -66,19 +67,19 @@ typedef struct sock_node
     int           domain;   /* socket(): AF_INET/AF_INET6. */
     int           type;     /* socket(): #SOCK_STREAM / #SOCK_DGRAM */
     int           protocol; /* socket(): particular protocol to be used with the socket. */
-    int           channel;
-    struct sockaddr_storage peer_addr; /* Orignal connect address. */
+    int           channel;  /* Proxy channel ID. */
+    struct sockaddr_storage peer_addr;  /* Orignal connect address. */
+    struct sockaddr_storage proxy_addr; /* Proxy address. */
 } sock_node_t;
 
 typedef struct prog_node
 {
-    ev_map_node_t node;
-    pid_t         pid;          /* Process ID. */
-    ev_map_t      sock_map;     /* Program socket map. Type: #sock_node_t. */
-    sock_node_t*  sock_last;    /* Last socket we are tracing. */
-    int           syscall;      /* System call number. */
-    int           b_setup;      /* Is setup done. */
-    int           b_in_syscall; /* Is entry syscall. */
+    ev_map_node_t     node;
+    ev_map_t          sock_map;     /* Program socket map. Type: #sock_node_t. */
+    sock_node_t*      sock_last;    /* Last socket we are tracing. */
+    nt_syscall_info_t si;           /* Syscall information. */
+    int               b_setup;      /* Is setup done. */
+    int               b_in_syscall; /* Is entry syscall. */
 } prog_node_t;
 
 typedef struct runtime

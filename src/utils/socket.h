@@ -115,6 +115,20 @@ int nt_accept(int fd);
  */
 int nt_socket_connect(int type, const struct sockaddr_storage* addr, int nonblock);
 
+/**
+ * @brief Convert domain into string.
+ * @param[in] domain AF_INET / AF_INET6
+ * @return String.
+ */
+const char* nt_socket_domain_name(int domain);
+
+/**
+ * @brief Convert type into string.
+ * @param[in] type SOCK_STREAM / SOCK_DGRAM
+ * @return String.
+ */
+const char* nt_socket_type_name(int type);
+
 #ifdef __cplusplus
 }
 #endif

@@ -5,6 +5,7 @@
 #include <string.h>
 #include <stdio.h>
 
+#define LOG_T(fmt, ...) nt_log(NT_LOG_TRACE, __FILE__, __FUNCTION__, __LINE__, fmt, ##__VA_ARGS__)
 #define LOG_D(fmt, ...) nt_log(NT_LOG_DEBUG, __FILE__, __FUNCTION__, __LINE__, fmt, ##__VA_ARGS__)
 #define LOG_I(fmt, ...) nt_log(NT_LOG_INFO, __FILE__, __FUNCTION__, __LINE__, fmt, ##__VA_ARGS__)
 #define LOG_W(fmt, ...) nt_log(NT_LOG_WARN, __FILE__, __FUNCTION__, __LINE__, fmt, ##__VA_ARGS__)
@@ -42,10 +43,11 @@ extern "C" {
 
 typedef enum nt_log_level
 {
-    NT_LOG_DEBUG = 0,
-    NT_LOG_INFO = 1,
-    NT_LOG_WARN = 2,
-    NT_LOG_ERROR = 3,
+    NT_LOG_TRACE = 0,
+    NT_LOG_DEBUG,
+    NT_LOG_INFO,
+    NT_LOG_WARN,
+    NT_LOG_ERROR,
 } nt_log_level_t;
 
 /**

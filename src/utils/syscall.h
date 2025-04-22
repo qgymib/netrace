@@ -1,6 +1,7 @@
 #ifndef NT_UTILS_SYSCALL_H
 #define NT_UTILS_SYSCALL_H
 
+#include <stdint.h>
 #include <sys/types.h>
 #include <netinet/in.h>
 
@@ -44,7 +45,7 @@ long nt_syscall_get_ret(pid_t pid);
  * @param[out] dst  Buffer to store data.
  * @param[in] len   Data length.
  */
-void nt_syscall_getdata(pid_t pid, long addr, void* dst, size_t len);
+void nt_syscall_getdata(pid_t pid, uintptr_t addr, void* dst, size_t len);
 
 /**
  * @brief Set data to program's space.
@@ -53,24 +54,25 @@ void nt_syscall_getdata(pid_t pid, long addr, void* dst, size_t len);
  * @param[in] src   Source data.
  * @param[in] len   Data length.
  */
-void nt_syscall_setdata(pid_t pid, long addr, const void* src, size_t len);
+void nt_syscall_setdata(pid_t pid, uintptr_t addr, const void* src, size_t len);
 
 /**
  * @brief Get socket address.
  * @param[in]  pid  Process ID.
- * @param[in]  arg  Argument index, must type of (struct sockaddr*).
+ * @param[in]  addr  Address to read.
  * @param[out] data Socket address storage.
- * @return The address of argument.
+ * @param[in] size Max read size.
  */
-long nt_syscall_get_sockaddr(pid_t pid, int arg, struct sockaddr_storage* data);
+int nt_syscall_get_sockaddr(pid_t pid, uintptr_t addr, struct sockaddr_storage* data, size_t size);
 
 /**
  * @brief Set socket address.
  * @param[in] pid   Process ID.
  * @param[in] addr  Address.
  * @param[in] data  Socket address.
+ * @param[in] size Max write size.
  */
-void nt_syscall_set_sockaddr(pid_t pid, long addr, const struct sockaddr_storage* data);
+int nt_syscall_set_sockaddr(pid_t pid, uintptr_t addr, const struct sockaddr_storage* data, size_t size);
 
 #ifdef __cplusplus
 }

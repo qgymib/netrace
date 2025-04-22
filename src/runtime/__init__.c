@@ -1,4 +1,5 @@
 #define _GNU_SOURCE
+#include <assert.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,6 +10,7 @@
 #include <sys/ptrace.h>
 #include <sys/wait.h>
 #include <netinet/in.h>
+#include "trace/__init__.h"
 #include "utils/defs.h"
 #include "utils/log.h"
 #include "utils/memory.h"
@@ -26,11 +28,12 @@
  * @brief System call tracing table.
  */
 /* clang-format off */
-#define SYSCALL_TRACING_TABLE(xx)   \
-    xx(SYS_socket,  s_trace_syscall_socket_enter,   s_trace_syscall_socket_leave)   \
-    xx(SYS_close,   s_trace_syscall_close_enter,    SYSCALL_SKIP)                   \
-    xx(SYS_connect, s_trace_syscall_connect_enter,  s_trace_syscall_connect_leave)  \
-    xx(SYS_clone,   s_trace_syscall_clone_enter,    SYSCALL_SKIP)
+#define SYSCALL_TRACING_TABLE(xx)                                                           \
+    xx(SYS_clone,       s_trace_syscall_clone_enter,    SYSCALL_SKIP)                       \
+    xx(SYS_close,       s_trace_syscall_close_enter,    SYSCALL_SKIP)                       \
+    xx(SYS_connect,     s_trace_syscall_connect_enter,  s_trace_syscall_connect_leave)      \
+    xx(SYS_getpeername, SYSCALL_SKIP,                   s_trace_syscall_getpeername_leave)  \
+    xx(SYS_socket,      s_trace_syscall_socket_enter,   s_trace_syscall_socket_leave)
 /* clang-format on */
 
 typedef struct nt_ipfilter_item
@@ -136,16 +139,16 @@ static void s_trace_setup(prog_node_t* info)
     info->b_setup = 1;
 
     /* Ask to trace fork() family, so we can keep eye on grandchild. */
-    long trace_option =
-        PTRACE_O_TRACECLONE | PTRACE_O_TRACEEXEC | PTRACE_O_TRACEFORK | PTRACE_O_TRACEVFORK;
-    long ptrace_ret = ptrace(PTRACE_SETOPTIONS, info->pid, 0, trace_option);
+    long trace_option = PTRACE_O_TRACECLONE | PTRACE_O_TRACEEXEC | PTRACE_O_TRACEFORK |
+                        PTRACE_O_TRACEVFORK | PTRACE_O_TRACESYSGOOD;
+    long ptrace_ret = ptrace(PTRACE_SETOPTIONS, info->si.pid, 0, trace_option);
     NT_ASSERT(ptrace_ret == 0, "ptrace failed: (%d) %s", errno, strerror(errno));
 }
 
 static prog_node_t* s_find_proc(pid_t pid)
 {
     prog_node_t tmp;
-    tmp.pid = pid;
+    tmp.si.pid = pid;
     ev_map_node_t* it = ev_map_find(&G->prog_map, &tmp.node);
     if (it == NULL)
     {
@@ -178,13 +181,13 @@ static void s_trace_syscall_socket_enter(prog_node_t* prog)
     sock_node_t* sock = nt_calloc(1, sizeof(sock_node_t));
     sock->fd = -1;
     sock->channel = -1;
-    sock->domain = (int)nt_syscall_get_arg(prog->pid, 0);
-    sock->type = (int)nt_syscall_get_arg(prog->pid, 1) & 0xFF;
-    sock->protocol = (int)nt_syscall_get_arg(prog->pid, 2);
+    sock->domain = prog->si.enter.entry.args[0];
+    sock->type = prog->si.enter.entry.args[1] & 0xFF;
+    sock->protocol = prog->si.enter.entry.args[2];
 
     /* clang-format off */
     NT_ASSERT(ev_map_insert(&prog->sock_map, &sock->node) == NULL,
-        "Conflict node: pid=%d, fd=%d.", prog->pid, sock->fd);
+        "[PID=%d] Conflict node fd=%d.", prog->si.pid, sock->fd);
     /* clang-format on */
     prog->sock_last = sock;
 }
@@ -211,9 +214,9 @@ static void s_trace_syscall_socket_leave(prog_node_t* prog)
 
     /* Update fd. */
     ev_map_erase(&prog->sock_map, &sock->node);
-    if ((sock->fd = (int)nt_syscall_get_ret(prog->pid)) < 0)
+    if ((sock->fd = prog->si.leave.exit.rval) < 0)
     {
-        LOG_D("pid=%d ignore socket=%d domain=%d type=%d protocol=%d.", prog->pid, sock->fd,
+        LOG_D("[PID=%d] Ignore socket=%d domain=%d type=%d protocol=%d.", prog->si.pid, sock->fd,
               sock->domain, sock->type, sock->protocol);
         nt_sock_node_release(sock);
         return;
@@ -221,7 +224,7 @@ static void s_trace_syscall_socket_leave(prog_node_t* prog)
 
     /* clang-format off */
     NT_ASSERT(ev_map_insert(&prog->sock_map, &sock->node) == NULL,
-        "Conflict node: pid=%d, fd=%d.", prog->pid, sock->fd);
+        "[PID=%d] Conflict node fd=%d.", prog->si.pid, sock->fd);
     /* clang-format on */
 }
 
@@ -240,7 +243,7 @@ static sock_node_t* s_prog_search_sock(prog_node_t* prog, int fd)
 
 static void s_trace_syscall_close_enter(prog_node_t* prog)
 {
-    int          fd = (int)nt_syscall_get_arg(prog->pid, 0);
+    int          fd = prog->si.enter.entry.args[0];
     sock_node_t* sock = s_prog_search_sock(prog, fd);
     if (sock == NULL)
     {
@@ -253,18 +256,25 @@ static void s_trace_syscall_close_enter(prog_node_t* prog)
 
 static void s_trace_syscall_connect_enter(prog_node_t* prog)
 {
-    int          fd = (int)nt_syscall_get_arg(prog->pid, 0);
-    sock_node_t* sock = s_prog_search_sock(prog, fd);
+    int          ret = prog->si.enter.entry.args[0];
+    sock_node_t* sock = s_prog_search_sock(prog, ret);
     if (sock == NULL)
     {
-        LOG_E("pid=%d cannot find fd=%d.", prog->pid, fd);
+        LOG_E("pid=%d cannot find fd=%d.", prog->si.pid, ret);
         prog->sock_last = NULL;
         return;
     }
     prog->sock_last = sock;
 
     /* Backup connect address. */
-    long p_sockaddr = nt_syscall_get_sockaddr(prog->pid, 1, &sock->peer_addr);
+    ret = nt_syscall_get_sockaddr(prog->si.pid, prog->si.enter.entry.args[1], &sock->peer_addr,
+                                  prog->si.enter.entry.args[2]);
+    if (ret < 0)
+    {
+        LOG_D("[PID=%d] Invalid parameter for connect(): (%d) %s.", prog->si.pid, ret,
+              NT_STRERROR(ret));
+        return;
+    }
 
     /* Parser peer information. */
     char peer_ip[64];
@@ -272,25 +282,24 @@ static void s_trace_syscall_connect_enter(prog_node_t* prog)
     nt_ip_name((struct sockaddr*)&sock->peer_addr, peer_ip, sizeof(peer_ip), &peer_port);
     const char* sock_type_name = nt_socktype_name(sock->type);
 
-    struct sockaddr_storage proxyaddr;
     if (sock->type == SOCK_DGRAM && peer_port == 53 && G->dns != NULL)
     {
-        LOG_I("Proxy dns://%s:%d", peer_ip, peer_port);
-        nt_dns_proxy_local_addr(G->dns, &proxyaddr);
+        LOG_I("[PID=%d] Proxy dns://%s:%d", prog->si.pid, peer_ip, peer_port);
+        nt_dns_proxy_local_addr(G->dns, &sock->proxy_addr);
         goto REWRITE_ADDRESS;
     }
 
     /* Check filter. */
     if (nt_ipfilter_check(G->ipfilter, sock->type, (struct sockaddr*)&sock->peer_addr))
     {
-        LOG_I("Bypass %s://%s:%d", sock_type_name, peer_ip, peer_port);
+        LOG_I("[PID=%d] Bypass %s://%s:%d", prog->si.pid, sock_type_name, peer_ip, peer_port);
         return;
     }
-    LOG_I("Redirect %s://%s:%d", sock_type_name, peer_ip, peer_port);
+    LOG_I("[PID=%d] Redirect %s://%s:%d", prog->si.pid, sock_type_name, peer_ip, peer_port);
 
     /* Create proxy channel. */
     sock->channel = G->proxy->channel_create(G->proxy, sock->type,
-                                             (struct sockaddr*)&sock->peer_addr, &proxyaddr);
+                                             (struct sockaddr*)&sock->peer_addr, &sock->proxy_addr);
     if (sock->channel < 0)
     {
         return;
@@ -298,39 +307,54 @@ static void s_trace_syscall_connect_enter(prog_node_t* prog)
 
 REWRITE_ADDRESS:
     /* Overwrite connect address. */
-    nt_syscall_set_sockaddr(prog->pid, p_sockaddr, &proxyaddr);
+    nt_syscall_set_sockaddr(prog->si.pid, prog->si.enter.entry.args[1], &sock->proxy_addr,
+                            prog->si.enter.entry.args[2]);
 }
 
 static void s_trace_syscall_clone_enter(prog_node_t* prog)
 {
-    long flags = nt_syscall_get_arg(prog->pid, 0);
+    long flags = prog->si.enter.entry.args[0];
     flags &= ~CLONE_UNTRACED;
 
     /*
      * `CLONE_PTRACE` seems useless on x86_64 and cause fork() return invalid value in aarch64.
      */
     // flags |= CLONE_PTRACE;
-    nt_syscall_set_arg(prog->pid, 0, flags);
+    nt_syscall_set_arg(prog->si.pid, 0, flags);
 }
 
 static void s_trace_syscall_connect_leave(prog_node_t* prog)
 {
-    long p_sockaddr = nt_syscall_get_arg(prog->pid, 1);
+    long p_sockaddr = prog->si.enter.entry.args[1];
 
     sock_node_t* sock = prog->sock_last;
     if (sock != NULL)
     {
         size_t data_sz = sock->peer_addr.ss_family == AF_INET ? sizeof(struct sockaddr_in)
                                                               : sizeof(struct sockaddr_in6);
-        nt_syscall_setdata(prog->pid, p_sockaddr, &sock->peer_addr, data_sz);
+        nt_syscall_setdata(prog->si.pid, p_sockaddr, &sock->peer_addr, data_sz);
     }
 
     prog->sock_last = NULL;
 }
 
+static void s_trace_syscall_getpeername_leave(prog_node_t* prog)
+{
+    int          fd = prog->si.enter.entry.args[0];
+    sock_node_t* sock = s_prog_search_sock(prog, fd);
+    if (sock == NULL)
+    {
+        return;
+    }
+
+    socklen_t addrlen = 0;
+    nt_syscall_getdata(prog->si.pid, prog->si.enter.entry.args[2], &addrlen, sizeof(addrlen));
+    nt_syscall_set_sockaddr(prog->si.pid, prog->si.enter.entry.args[1], &sock->peer_addr, addrlen);
+}
+
 static void s_trace_syscall_enter(prog_node_t* info)
 {
-    switch (info->syscall)
+    switch (info->si.enter.entry.nr)
     {
         // clang-format off
 #define EXPAND_SYSCALL(ID, ENTER, _) case ID: ENTER(info); break;
@@ -343,7 +367,7 @@ static void s_trace_syscall_enter(prog_node_t* info)
 
 static void s_trace_syscall_leave(prog_node_t* info)
 {
-    switch (info->syscall)
+    switch (info->si.enter.entry.nr)
     {
         // clang-format off
 #define EXPAND_SYSCALL(ID, _, LEAVE) case ID: LEAVE(info); break;
@@ -356,9 +380,14 @@ static void s_trace_syscall_leave(prog_node_t* info)
 
 static void s_trace_syscall(prog_node_t* info)
 {
+    char         buff[1024];
+    const size_t si_size = sizeof(info->si.enter);
+
     if (!info->b_in_syscall)
     {
-        info->syscall = (int)nt_syscall_get_id(info->pid);
+        info->si.enter.op = 0xff;
+        ptrace(PTRACE_GET_SYSCALL_INFO, info->si.pid, si_size, &info->si.enter);
+        NT_ASSERT(info->si.enter.op == PTRACE_SYSCALL_INFO_ENTRY, "%d", info->si.enter.op);
 
     SYSCALL_ENTER:
         info->b_in_syscall = 1;
@@ -366,16 +395,33 @@ static void s_trace_syscall(prog_node_t* info)
     }
     else
     {
-        int syscall = (int)nt_syscall_get_id(info->pid);
-        if (syscall != info->syscall)
+        info->si.leave.op = 0xff;
+        ptrace(PTRACE_GET_SYSCALL_INFO, info->si.pid, si_size, &info->si.leave);
+        NT_ASSERT(info->si.leave.op != 0xff, "%d", info->si.leave.op);
+
+        if (info->si.leave.op == PTRACE_SYSCALL_INFO_ENTRY)
         {
-            LOG_D("syscall mismatch: pid=%d old=%d new=%d.", info->pid, info->syscall, syscall);
-            info->syscall = syscall;
+            LOG_I("[PID=%d] syscall mismatch: old=%d:%s new=%d:%s.", info->si.pid,
+                  info->si.enter.entry.nr, nt_syscall_name(info->si.enter.entry.nr),
+                  info->si.leave.entry.nr, nt_syscall_name(info->si.leave.entry.nr));
+            memcpy(&info->si.enter, &info->si.leave, si_size);
             goto SYSCALL_ENTER;
         }
 
-        info->b_in_syscall = 0;
-        s_trace_syscall_leave(info);
+        if (info->si.leave.op == PTRACE_SYSCALL_INFO_EXIT)
+        {
+            info->b_in_syscall = 0;
+            s_trace_syscall_leave(info);
+        }
+        else
+        {
+            LOG_I("[PID=%d] syscall mismatch: old=%d:%s newop=%d", info->si.pid,
+                  info->si.enter.entry.nr, nt_syscall_name(info->si.enter.entry.nr),
+                  info->si.leave.op);
+        }
+
+        nt_trace_dump(&info->si, buff, sizeof(buff));
+        LOG_T("[PID=%d] %s", info->si.pid, buff);
     }
 }
 
@@ -390,7 +436,7 @@ static int s_on_cmp_sock(const ev_map_node_t* key1, const ev_map_node_t* key2, v
 static prog_node_t* s_prog_node_save(pid_t pid)
 {
     prog_node_t* info = nt_calloc(1, sizeof(prog_node_t));
-    info->pid = pid;
+    info->si.pid = pid;
     ev_map_init(&info->sock_map, s_on_cmp_sock, NULL);
 
     ev_map_insert(&G->prog_map, &info->node);
@@ -436,7 +482,7 @@ static void do_trace(const nt_cmd_opt_t* opt, int prog_pipe[2])
 
         if (WIFSTOPPED(status))
         {
-            int sig = WSTOPSIG(status);
+            int sig = WSTOPSIG(status) & (~0x80);
             if (sig == SIGTRAP)
             {
                 if (!info->b_setup)
@@ -492,11 +538,11 @@ static int s_on_cmp_prog(const ev_map_node_t* key1, const ev_map_node_t* key2, v
     (void)arg;
     const prog_node_t* info1 = container_of(key1, prog_node_t, node);
     const prog_node_t* info2 = container_of(key2, prog_node_t, node);
-    if (info1->pid == info2->pid)
+    if (info1->si.pid == info2->si.pid)
     {
         return 0;
     }
-    return info1->pid < info2->pid ? -1 : 1;
+    return info1->si.pid < info2->si.pid ? -1 : 1;
 }
 
 static int s_setup_ipfilter_add_rule_list(const nt_ipfilter_item_t* items, size_t size)
@@ -707,7 +753,7 @@ static void nt_runtime_init(const nt_cmd_opt_t* opt, pid_t pid)
         }
         if ((ret = s_setup_dns_proxy(url)) != 0)
         {
-            LOG_E("Start DNS proxy failed: %d.", ret);
+            LOG_E("Start DNS proxy failed: (%d) %s.", ret, NT_STRERROR(ret));
             exit(EXIT_FAILURE);
         }
         LOG_D("Setup DNS proxy to `%s`.", opt->dns);
@@ -773,6 +819,7 @@ static void nt_runtime_cleanup(void)
 static nt_log_level_t s_cmd_opt_parse_loglevel(const char* level)
 {
     static log_level_pair s_level[] = {
+        { "trace", NT_LOG_TRACE },
         { "debug", NT_LOG_DEBUG },
         { "info",  NT_LOG_INFO  },
         { "warn",  NT_LOG_WARN  },

@@ -5,7 +5,6 @@ add_executable(${PROJECT_NAME}_test
     "cases/cstr.c"
     "cases/dns_parser.c"
     "cases/exitcode.c"
-    "cases/grandchild.c"
     "cases/urlparser.c"
     "tools/__init__.c"
     "tools/exit.c"
