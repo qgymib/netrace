@@ -15,6 +15,10 @@ typedef struct syscall_entry
     nt_syscall_decode_fn decode_fn; /* Decode function. */
 } syscall_entry_t;
 
+/**
+ * @brief System call entry list. In ascii order.
+ * Syscall is not portable, so it is necessary to check if it is defined.
+ */
 static syscall_entry_t s_syscall_entry[] = {
     { SYS_accept,          "accept",          NULL                          },
 #if defined(SYS_access)
@@ -24,13 +28,16 @@ static syscall_entry_t s_syscall_entry[] = {
     { SYS_arch_prctl,      "arch_prctl",      NULL                          },
 #endif
     { SYS_brk,             "brk",             NULL                          },
+    { SYS_chdir,           "chdir",           NULL                          },
 #if defined(SYS_chmod)
     { SYS_chmod,           "chmod",           NULL                          },
 #endif
     { SYS_clone,           "clone",           NULL                          },
+    { SYS_clone3,          "clone3",          NULL                          },
     { SYS_close,           "close",           nt_syscall_decode_close       },
     { SYS_close_range,     "close_range",     nt_syscall_decode_close_range },
     { SYS_connect,         "connect",         nt_syscall_decode_connect     },
+    { SYS_dup,             "dup",             NULL                          },
 #if defined(SYS_dup2)
     { SYS_dup2,            "dup2",            NULL                          },
 #endif
@@ -38,16 +45,23 @@ static syscall_entry_t s_syscall_entry[] = {
     { SYS_execve,          "execve",          NULL                          },
     { SYS_fcntl,           "fcntl",           NULL                          },
     { SYS_fstat,           "fstat",           NULL                          },
+    { SYS_fsync,           "fsync",           NULL                          },
     { SYS_futex,           "futex",           NULL                          },
     { SYS_getcwd,          "getcwd",          NULL                          },
     { SYS_getdents64,      "getdents64",      NULL                          },
     { SYS_getpeername,     "getpeername",     nt_syscall_decode_getpeername },
     { SYS_getpid,          "getpid",          NULL                          },
+    { SYS_getpgid,         "getpgid",         NULL                          },
     { SYS_getrandom,       "getrandom",       NULL                          },
     { SYS_getsockname,     "getsockname",     nt_syscall_decode_getsockname },
+    { SYS_getsockopt,      "getsockopt",      NULL                          },
     { SYS_getuid,          "getuid",          NULL                          },
     { SYS_ioctl,           "ioctl",           nt_syscall_decode_ioctl       },
     { SYS_lseek,           "lseek",           NULL                          },
+#if defined(SYS_link)
+    { SYS_link,            "link",            NULL                          },
+#endif
+    { SYS_madvise,         "madvise",         NULL                          },
 #if defined(SYS_mkdir)
     { SYS_mkdir,           "mkdir",           NULL                          },
 #endif
@@ -62,6 +76,7 @@ static syscall_entry_t s_syscall_entry[] = {
 #endif
     { SYS_pread64,         "pread64",         NULL                          },
     { SYS_prlimit64,       "prlimit64",       NULL                          },
+    { SYS_pselect6,        "pselect6",        NULL                          },
     { SYS_pwrite64,        "pwrite64",        NULL                          },
     { SYS_read,            "read",            nt_syscall_decode_read        },
 #if defined(SYS_readlink)
@@ -89,6 +104,7 @@ static syscall_entry_t s_syscall_entry[] = {
     { SYS_set_robust_list, "set_robust_list", NULL                          },
     { SYS_set_tid_address, "set_tid_address", NULL                          },
     { SYS_setsockopt,      "setsockopt",      nt_syscall_decode_setsockopt  },
+    { SYS_setitimer,       "setitimer",       NULL                          },
     { SYS_socket,          "socket",          nt_syscall_decode_socket      },
     { SYS_statfs,          "statfs",          NULL                          },
 #if defined(SYS_symlink)
