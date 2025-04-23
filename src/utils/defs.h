@@ -47,4 +47,11 @@
 #define NT_STRERROR(x) strerror(x)
 #endif
 
+/**
+ * @brief Get original system errno.
+ * @param[in] x Wrapped errno
+ * @return Raw system errno.
+ */
+#define NT_RAWERR(x) NT_ERR(x)
+
 #endif

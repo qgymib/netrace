@@ -74,6 +74,16 @@ int nt_syscall_get_sockaddr(pid_t pid, uintptr_t addr, struct sockaddr_storage* 
  */
 int nt_syscall_set_sockaddr(pid_t pid, uintptr_t addr, const struct sockaddr_storage* data, size_t size);
 
+/**
+ * @brief Get string.
+ * @param[in] pid Process ID.
+ * @param[in] addr Address.
+ * @param[in] buff Buffer.
+ * @param[in] size Buffer size.
+ * @return The number of bytes written, excluding null byte.
+ */
+int nt_syscall_get_string(pid_t pid, uintptr_t addr, char* buff, size_t size);
+
 #ifdef __cplusplus
 }
 #endif

@@ -380,7 +380,7 @@ static void s_trace_syscall_leave(prog_node_t* info)
 
 static void s_trace_syscall(prog_node_t* info)
 {
-    char         buff[1024];
+    int          ret;
     const size_t si_size = sizeof(info->si.enter);
 
     if (!info->b_in_syscall)
@@ -389,24 +389,20 @@ static void s_trace_syscall(prog_node_t* info)
         ptrace(PTRACE_GET_SYSCALL_INFO, info->si.pid, si_size, &info->si.enter);
         NT_ASSERT(info->si.enter.op == PTRACE_SYSCALL_INFO_ENTRY, "%d", info->si.enter.op);
 
-    SYSCALL_ENTER:
         info->b_in_syscall = 1;
         s_trace_syscall_enter(info);
+
+        info->tdbuff[0] = '\0';
+        ret =
+            nt_trace_dump(&info->si, PTRACE_SYSCALL_INFO_ENTRY, info->tdbuff, sizeof(info->tdbuff));
+        info->tdbuff_sz = ret >= 0 ? ret : 0;
     }
     else
     {
         info->si.leave.op = 0xff;
         ptrace(PTRACE_GET_SYSCALL_INFO, info->si.pid, si_size, &info->si.leave);
         NT_ASSERT(info->si.leave.op != 0xff, "%d", info->si.leave.op);
-
-        if (info->si.leave.op == PTRACE_SYSCALL_INFO_ENTRY)
-        {
-            LOG_I("[PID=%d] syscall mismatch: old=%d:%s new=%d:%s.", info->si.pid,
-                  info->si.enter.entry.nr, nt_syscall_name(info->si.enter.entry.nr),
-                  info->si.leave.entry.nr, nt_syscall_name(info->si.leave.entry.nr));
-            memcpy(&info->si.enter, &info->si.leave, si_size);
-            goto SYSCALL_ENTER;
-        }
+        assert(info->si.leave.op != PTRACE_SYSCALL_INFO_ENTRY);
 
         if (info->si.leave.op == PTRACE_SYSCALL_INFO_EXIT)
         {
@@ -419,9 +415,9 @@ static void s_trace_syscall(prog_node_t* info)
                   info->si.enter.entry.nr, nt_syscall_name(info->si.enter.entry.nr),
                   info->si.leave.op);
         }
-
-        nt_trace_dump(&info->si, buff, sizeof(buff));
-        LOG_T("[PID=%d] %s", info->si.pid, buff);
+        nt_trace_dump(&info->si, info->si.leave.op, info->tdbuff + info->tdbuff_sz,
+                      sizeof(info->tdbuff) - info->tdbuff_sz);
+        LOG_T("[PID=%d] %s", info->si.pid, info->tdbuff);
     }
 }
 

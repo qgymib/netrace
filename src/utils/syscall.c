@@ -208,7 +208,8 @@ int nt_syscall_get_sockaddr(pid_t pid, uintptr_t addr, struct sockaddr_storage* 
     return 0;
 }
 
-int nt_syscall_set_sockaddr(pid_t pid, uintptr_t addr, const struct sockaddr_storage* data, size_t size)
+int nt_syscall_set_sockaddr(pid_t pid, uintptr_t addr, const struct sockaddr_storage* data,
+                            size_t size)
 {
     const size_t sockv4_len = sizeof(struct sockaddr_in);
     const size_t sockv6_len = sizeof(struct sockaddr_in6);
@@ -220,4 +221,42 @@ int nt_syscall_set_sockaddr(pid_t pid, uintptr_t addr, const struct sockaddr_sto
 
     nt_syscall_setdata(pid, addr, data, write_sz);
     return 0;
+}
+
+int nt_syscall_get_string(pid_t pid, uintptr_t addr, char* buff, size_t size)
+{
+    size_t         offset = 0;
+    void*          eol = NULL;
+    syscall_word_t word;
+
+    while (offset < size && eol == NULL)
+    {
+        errno = 0;
+        word.val = ptrace(PTRACE_PEEKDATA, pid, addr + offset, NULL);
+        if (errno != 0)
+        {
+            return NT_ERR(errno);
+        }
+
+        size_t left_sz = size - offset;
+        size_t copy_sz = NT_MIN(sizeof(word), left_sz);
+        if ((eol = memchr(&word.val, '\0', sizeof(word.val))) != NULL)
+        {
+            size_t str_len = (char*)eol - (char*)&word.val;
+            copy_sz = NT_MIN(copy_sz, str_len);
+        }
+
+        memcpy(buff + offset, word.buf, copy_sz);
+        offset += copy_sz;
+    }
+
+    if (offset < size)
+    {
+        buff[offset] = '\0';
+    }
+    else
+    {
+        buff[size - 1] = '\0';
+    }
+    return offset;
 }

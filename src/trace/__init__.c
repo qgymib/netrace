@@ -32,17 +32,17 @@ static syscall_entry_t s_syscall_entry[] = {
 #if defined(SYS_chmod)
     { SYS_chmod,           "chmod",           NULL                          },
 #endif
-    { SYS_clone,           "clone",           NULL                          },
-    { SYS_clone3,          "clone3",          NULL                          },
+    { SYS_clone,           "clone",           nt_syscall_decode_clone       },
+    { SYS_clone3,          "clone3",          nt_syscall_decode_clone       },
     { SYS_close,           "close",           nt_syscall_decode_close       },
     { SYS_close_range,     "close_range",     nt_syscall_decode_close_range },
     { SYS_connect,         "connect",         nt_syscall_decode_connect     },
-    { SYS_dup,             "dup",             NULL                          },
+    { SYS_dup,             "dup",             nt_syscall_decode_dup         },
 #if defined(SYS_dup2)
-    { SYS_dup2,            "dup2",            NULL                          },
+    { SYS_dup2,            "dup2",            nt_syscall_decode_dup2        },
 #endif
     { SYS_exit_group,      "exit_group",      NULL                          },
-    { SYS_execve,          "execve",          NULL                          },
+    { SYS_execve,          "execve",          nt_syscall_decode_execve      },
     { SYS_fcntl,           "fcntl",           NULL                          },
     { SYS_fstat,           "fstat",           NULL                          },
     { SYS_fsync,           "fsync",           NULL                          },
@@ -77,7 +77,7 @@ static syscall_entry_t s_syscall_entry[] = {
     { SYS_pread64,         "pread64",         nt_syscall_decode_pread64     },
     { SYS_prlimit64,       "prlimit64",       NULL                          },
     { SYS_pselect6,        "pselect6",        NULL                          },
-    { SYS_pwrite64,        "pwrite64",        NULL                          },
+    { SYS_pwrite64,        "pwrite64",        nt_syscall_decode_pwrite64    },
     { SYS_read,            "read",            nt_syscall_decode_read        },
 #if defined(SYS_readlink)
     { SYS_readlink,        "readlink",        NULL                          },
@@ -119,12 +119,7 @@ static syscall_entry_t s_syscall_entry[] = {
     { SYS_write,           "write",           nt_syscall_decode_write       },
 };
 
-static int s_is_printable(int c)
-{
-    return (32 <= c && c <= 126) && c != '\\';
-}
-
-static const char* s_dump_space(int c)
+static const char* s_escape(int c)
 {
     switch (c)
     {
@@ -140,10 +135,12 @@ static const char* s_dump_space(int c)
         return "\\v";
     case '\f':
         return "\\f";
+    case '\\':
+        return "\\\\";
     default:
         break;
     }
-    abort();
+    return NULL;
 }
 
 /**
@@ -165,10 +162,10 @@ const syscall_entry_t* s_nt_syscall_entry(int id)
     return NULL;
 }
 
-int nt_trace_dump(const nt_syscall_info_t* si, char* buff, size_t size)
+int nt_trace_dump(const nt_syscall_info_t* si, int op, char* buff, size_t size)
 {
-    int    ret;
-    size_t offset = 0;
+    int         ret;
+    nt_strcat_t sc = NT_STRCAT_INIT(buff, size);
 
     const syscall_entry_t* entry = s_nt_syscall_entry(si->enter.entry.nr);
     if (entry == NULL)
@@ -176,43 +173,33 @@ int nt_trace_dump(const nt_syscall_info_t* si, char* buff, size_t size)
         return snprintf(buff, size, "(%d)", (int)si->enter.entry.nr);
     }
 
-    if ((ret = snprintf(buff, size, "%s", entry->name)) >= (int)size)
+    /* Append name. */
+    if (op == PTRACE_SYSCALL_INFO_ENTRY)
     {
-        return ret;
-    }
-    offset += ret;
-
-    if (entry->decode_fn != NULL)
-    {
-        size_t left_sz = size - offset;
-        if ((ret = entry->decode_fn(si, buff + offset, left_sz)) >= (int)left_sz)
-        {
-            return offset + ret;
-        }
-        offset += ret;
-    }
-    else
-    {
-        if (offset < size - 1)
-        {
-            buff[offset++] = '(';
-        }
-        if (offset < size - 1)
-        {
-            buff[offset++] = ')';
-        }
-        if (offset < size)
-        {
-            buff[offset++] = '\0';
-        }
+        nt_strcat(&sc, "%s", entry->name);
     }
 
-    if (offset >= size)
+    if (entry->decode_fn == NULL)
+    {
+        if (op == PTRACE_SYSCALL_INFO_ENTRY)
+        {
+            nt_strcat(&sc, "()");
+        }
+        goto FINISH;
+    }
+
+    size_t left_sz = size - sc.size;
+    if ((ret = entry->decode_fn(si, op, buff + sc.size, left_sz)) >= 0)
+    {
+        sc.size += (ret >= (int)left_sz) ? (left_sz - 1) : (size_t)ret;
+    }
+
+FINISH:
+    if (sc.size >= size)
     {
         memcpy(buff + size - 4, "...", 4);
     }
-
-    return offset;
+    return sc.size;
 }
 
 const char* nt_syscall_name(int id)
@@ -245,13 +232,14 @@ void nt_strcat_dump(nt_strcat_t* sc, void* buff, size_t size)
     for (i = 0; i < size; i++)
     {
         unsigned char c = addr[i];
-        if (s_is_printable(c))
+        const char*   e = s_escape(c);
+        if (e != NULL)
+        {
+            nt_strcat(sc, "%s", e);
+        }
+        else if (isprint(c))
         {
             nt_strcat(sc, "%c", c);
-        }
-        else if (isspace(c))
-        {
-            nt_strcat(sc, "%s", s_dump_space(c));
         }
         else
         {

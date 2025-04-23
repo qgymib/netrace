@@ -37,7 +37,7 @@ typedef struct
  * @return The number of bytes would have written if \p size is large enough, excluding the
  *   terminating null byte.
  */
-typedef int (*nt_syscall_decode_fn)(const nt_syscall_info_t* si, char* buff, size_t size);
+typedef int (*nt_syscall_decode_fn)(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 
 /**
  * @brief Get name of syscall.
@@ -53,7 +53,7 @@ const char* nt_syscall_name(int id);
  * @param[in] size Buffer size.
  * @return The number of bytes would have written.
  */
-int nt_trace_dump(const nt_syscall_info_t* si, char* buff, size_t size);
+int nt_trace_dump(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 
 /**
  * @brief Append string into \p s.
@@ -72,19 +72,24 @@ int nt_strcat(nt_strcat_t* sc, const char* fmt, ...);
  */
 void nt_strcat_dump(nt_strcat_t* sc, void* buff, size_t size);
 
-int nt_syscall_decode_close(const nt_syscall_info_t* si, char* buff, size_t size);
-int nt_syscall_decode_close_range(const nt_syscall_info_t* si, char* buff, size_t size);
-int nt_syscall_decode_connect(const nt_syscall_info_t* si, char* buff, size_t size);
-int nt_syscall_decode_getpeername(const nt_syscall_info_t* si, char* buff, size_t size);
-int nt_syscall_decode_getsockname(const nt_syscall_info_t* si, char* buff, size_t size);
-int nt_syscall_decode_ioctl(const nt_syscall_info_t* si, char* buff, size_t size);
-int nt_syscall_decode_pread64(const nt_syscall_info_t* si, char* buff, size_t size);
-int nt_syscall_decode_read(const nt_syscall_info_t* si, char* buff, size_t size);
-int nt_syscall_decode_recvfrom(const nt_syscall_info_t* si, char* buff, size_t size);
-int nt_syscall_decode_sendmmsg(const nt_syscall_info_t* si, char* buff, size_t size);
-int nt_syscall_decode_setsockopt(const nt_syscall_info_t* si, char* buff, size_t size);
-int nt_syscall_decode_socket(const nt_syscall_info_t* si, char* buff, size_t size);
-int nt_syscall_decode_write(const nt_syscall_info_t* si, char* buff, size_t size);
+int nt_syscall_decode_clone(const nt_syscall_info_t* si, int op, char* buff, size_t size);
+int nt_syscall_decode_close(const nt_syscall_info_t* si, int op, char* buff, size_t size);
+int nt_syscall_decode_close_range(const nt_syscall_info_t* si, int op, char* buff, size_t size);
+int nt_syscall_decode_connect(const nt_syscall_info_t* si, int op, char* buff, size_t size);
+int nt_syscall_decode_dup(const nt_syscall_info_t* si, int op, char* buff, size_t size);
+int nt_syscall_decode_dup2(const nt_syscall_info_t* si, int op, char* buff, size_t size);
+int nt_syscall_decode_execve(const nt_syscall_info_t* si, int op, char* buff, size_t size);
+int nt_syscall_decode_getpeername(const nt_syscall_info_t* si, int op, char* buff, size_t size);
+int nt_syscall_decode_getsockname(const nt_syscall_info_t* si, int op, char* buff, size_t size);
+int nt_syscall_decode_ioctl(const nt_syscall_info_t* si, int op, char* buff, size_t size);
+int nt_syscall_decode_pread64(const nt_syscall_info_t* si, int op, char* buff, size_t size);
+int nt_syscall_decode_pwrite64(const nt_syscall_info_t* si, int op, char* buff, size_t size);
+int nt_syscall_decode_read(const nt_syscall_info_t* si, int op, char* buff, size_t size);
+int nt_syscall_decode_recvfrom(const nt_syscall_info_t* si, int op, char* buff, size_t size);
+int nt_syscall_decode_sendmmsg(const nt_syscall_info_t* si, int op, char* buff, size_t size);
+int nt_syscall_decode_setsockopt(const nt_syscall_info_t* si, int op, char* buff, size_t size);
+int nt_syscall_decode_socket(const nt_syscall_info_t* si, int op, char* buff, size_t size);
+int nt_syscall_decode_write(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 
 #ifdef __cplusplus
 }

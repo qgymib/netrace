@@ -136,12 +136,15 @@ static void s_decode_ioctl_arg1(nt_strcat_t* sc, const nt_syscall_info_t* si)
     }
 }
 
-int nt_syscall_decode_ioctl(const nt_syscall_info_t* si, char* buff, size_t size)
+int nt_syscall_decode_ioctl(const nt_syscall_info_t* si, int op, char* buff, size_t size)
 {
     nt_strcat_t sc = NT_STRCAT_INIT(buff, size);
-    nt_strcat(&sc, "(");
-    s_decode_ioctl_arg0(&sc, si);
-    s_decode_ioctl_arg1(&sc, si);
-    nt_strcat(&sc, ") = %d", (int)si->leave.exit.rval);
+    if (op == PTRACE_SYSCALL_INFO_EXIT)
+    {
+        nt_strcat(&sc, "(");
+        s_decode_ioctl_arg0(&sc, si);
+        s_decode_ioctl_arg1(&sc, si);
+        nt_strcat(&sc, ") = %d", (int)si->leave.exit.rval);
+    }
     return sc.size;
 }

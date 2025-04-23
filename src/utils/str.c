@@ -1,6 +1,22 @@
+#include <errno.h>
 #include <string.h>
+#include "utils/defs.h"
 #include "utils/memory.h"
 #include "str.h"
+
+typedef struct errno_name
+{
+    int         code;
+    const char* name;
+} errno_name_t;
+
+static errno_name_t s_errno_name[] = {
+    { EBUSY,  "EBUSY"  },
+    { EFAULT, "EFAULT" },
+    { EIO,    "EIO"    },
+    { EPERM,  "EPERM"  },
+    { ESRCH,  "ESRCH"  },
+};
 
 const char* nt_strrstr(const char* haystack, const char* needle)
 {
@@ -59,4 +75,17 @@ const char* nt_strnrstr(const char* haystack, size_t len, const char* needle)
     }
 
     return result;
+}
+
+const char* nt_strerrorname(int code)
+{
+    size_t i;
+    for (i = 0; i < ARRAY_SIZE(s_errno_name); i++)
+    {
+        if (s_errno_name[i].code == code)
+        {
+            return s_errno_name[i].name;
+        }
+    }
+    return NULL;
 }

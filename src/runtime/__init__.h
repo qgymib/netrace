@@ -80,6 +80,8 @@ typedef struct prog_node
     nt_syscall_info_t si;           /* Syscall information. */
     int               b_setup;      /* Is setup done. */
     int               b_in_syscall; /* Is entry syscall. */
+    char              tdbuff[1024]; /* Trace decode buff. */
+    size_t            tdbuff_sz;    /* Trace decode buff size. */
 } prog_node_t;
 
 typedef struct runtime

@@ -17,6 +17,8 @@ const char* nt_strrstr(const char* haystack, const char* needle);
  */
 const char* nt_strnrstr(const char* haystack, size_t len, const char* needle);
 
+const char* nt_strerrorname(int code);
+
 #ifdef __cplusplus
 }
 #endif

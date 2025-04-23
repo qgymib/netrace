@@ -99,23 +99,27 @@ static void s_decode_recvfrom_arg5(nt_strcat_t* sc, const nt_syscall_info_t* si,
     nt_strcat(sc, "%lu", addrlen);
 }
 
-int nt_syscall_decode_recvfrom(const nt_syscall_info_t* si, char* buff, size_t size)
+int nt_syscall_decode_recvfrom(const nt_syscall_info_t* si, int op, char* buff, size_t size)
 {
+    socklen_t   addrlen = 0;
     nt_strcat_t sc = NT_STRCAT_INIT(buff, size);
-    nt_strcat(&sc, "(");
-    s_decode_recvfrom_arg0(&sc, si);
-    s_decode_recvfrom_arg1(&sc, si);
-    s_decode_recvfrom_arg2(&sc, si);
-    s_decode_recvfrom_arg3(&sc, si);
-
-    socklen_t addrlen = 0;
-    if (si->enter.entry.args[5] != 0)
+    if (op == PTRACE_SYSCALL_INFO_EXIT)
     {
-        nt_syscall_getdata(si->pid, si->enter.entry.args[5], &addrlen, sizeof(addrlen));
+        nt_strcat(&sc, "(");
+        s_decode_recvfrom_arg0(&sc, si);
+        s_decode_recvfrom_arg1(&sc, si);
+        s_decode_recvfrom_arg2(&sc, si);
+        s_decode_recvfrom_arg3(&sc, si);
+
+        if (si->enter.entry.args[5] != 0)
+        {
+            nt_syscall_getdata(si->pid, si->enter.entry.args[5], &addrlen, sizeof(addrlen));
+        }
+
+        s_decode_recvfrom_arg4(&sc, si, addrlen);
+        s_decode_recvfrom_arg5(&sc, si, addrlen);
+        nt_strcat(&sc, ") = %ld", (long)si->leave.exit.rval);
     }
 
-    s_decode_recvfrom_arg4(&sc, si, addrlen);
-    s_decode_recvfrom_arg5(&sc, si, addrlen);
-    nt_strcat(&sc, ") = %ld", (long)si->leave.exit.rval);
     return sc.size;
 }

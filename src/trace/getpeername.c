@@ -38,20 +38,22 @@ static void s_decode_getpeername_arg2(nt_strcat_t* sc, const nt_syscall_info_t* 
     nt_strcat(sc, "%lu", (unsigned long)addrlen);
 }
 
-int nt_syscall_decode_getpeername(const nt_syscall_info_t* si, char* buff, size_t size)
+int nt_syscall_decode_getpeername(const nt_syscall_info_t* si, int op, char* buff, size_t size)
 {
+    socklen_t   addrlen = 0;
     nt_strcat_t sc = NT_STRCAT_INIT(buff, size);
-    nt_strcat(&sc, "(");
-
-    socklen_t addrlen = 0;
-    if (si->enter.entry.args[2] != 0)
+    if (op == PTRACE_SYSCALL_INFO_EXIT)
     {
-        nt_syscall_getdata(si->pid, si->enter.entry.args[2], &addrlen, sizeof(addrlen));
-    }
+        nt_strcat(&sc, "(");
+        if (si->enter.entry.args[2] != 0)
+        {
+            nt_syscall_getdata(si->pid, si->enter.entry.args[2], &addrlen, sizeof(addrlen));
+        }
 
-    s_decode_getpeername_arg0(&sc, si);
-    s_decode_getpeername_arg1(&sc, si, addrlen);
-    s_decode_getpeername_arg2(&sc, si, addrlen);
-    nt_strcat(&sc, ") = %d", (int)si->leave.exit.rval);
+        s_decode_getpeername_arg0(&sc, si);
+        s_decode_getpeername_arg1(&sc, si, addrlen);
+        s_decode_getpeername_arg2(&sc, si, addrlen);
+        nt_strcat(&sc, ") = %d", (int)si->leave.exit.rval);
+    }
     return sc.size;
 }
