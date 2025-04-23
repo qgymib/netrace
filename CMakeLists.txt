@@ -36,6 +36,7 @@ add_library(lib${PROJECT_NAME} STATIC
     "src/trace/getpeername.c"
     "src/trace/getsockname.c"
     "src/trace/ioctl.c"
+    "src/trace/pread64.c"
     "src/trace/read.c"
     "src/trace/recvfrom.c"
     "src/trace/sendmmsg.c"

@@ -78,6 +78,7 @@ int nt_syscall_decode_connect(const nt_syscall_info_t* si, char* buff, size_t si
 int nt_syscall_decode_getpeername(const nt_syscall_info_t* si, char* buff, size_t size);
 int nt_syscall_decode_getsockname(const nt_syscall_info_t* si, char* buff, size_t size);
 int nt_syscall_decode_ioctl(const nt_syscall_info_t* si, char* buff, size_t size);
+int nt_syscall_decode_pread64(const nt_syscall_info_t* si, char* buff, size_t size);
 int nt_syscall_decode_read(const nt_syscall_info_t* si, char* buff, size_t size);
 int nt_syscall_decode_recvfrom(const nt_syscall_info_t* si, char* buff, size_t size);
 int nt_syscall_decode_sendmmsg(const nt_syscall_info_t* si, char* buff, size_t size);

@@ -74,7 +74,7 @@ static syscall_entry_t s_syscall_entry[] = {
 #if defined(SYS_poll)
     { SYS_poll,            "poll",            NULL                          },
 #endif
-    { SYS_pread64,         "pread64",         NULL                          },
+    { SYS_pread64,         "pread64",         nt_syscall_decode_pread64     },
     { SYS_prlimit64,       "prlimit64",       NULL                          },
     { SYS_pselect6,        "pselect6",        NULL                          },
     { SYS_pwrite64,        "pwrite64",        NULL                          },
