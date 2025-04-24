@@ -40,6 +40,7 @@ add_library(lib${PROJECT_NAME} STATIC
     "src/trace/execve.c"
     "src/trace/fcntl.c"
     "src/trace/getpeername.c"
+    "src/trace/getpid.c"
     "src/trace/getsockname.c"
     "src/trace/getuid.c"
     "src/trace/ioctl.c"
