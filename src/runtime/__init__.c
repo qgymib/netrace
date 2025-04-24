@@ -290,7 +290,8 @@ static void s_trace_syscall_connect_enter(prog_node_t* prog)
     }
 
     /* Check filter. */
-    if (nt_ipfilter_check(G->ipfilter, sock->type, (struct sockaddr*)&sock->peer_addr))
+    if ((sock->domain != AF_INET && sock->domain != AF_INET6) ||
+        nt_ipfilter_check(G->ipfilter, sock->type, (struct sockaddr*)&sock->peer_addr))
     {
         LOG_I("[PID=%d] Bypass %s://%s:%d", prog->si.pid, sock_type_name, peer_ip, peer_port);
         return;
