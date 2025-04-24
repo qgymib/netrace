@@ -4,8 +4,10 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
+#include <inttypes.h>
 #include <sys/syscall.h>
 #include "utils/defs.h"
+#include "utils/str.h"
 #include "__init__.h"
 
 typedef struct syscall_entry
@@ -259,4 +261,25 @@ void nt_strcat_dump(nt_strcat_t* sc, void* buff, size_t size)
         }
     }
     nt_strcat(sc, "\"");
+}
+
+void nt_strcat_ret(nt_strcat_t* sc, int64_t ret, int err)
+{
+    if (!err)
+    {
+        goto APPEND_CODE;
+    }
+
+    int         errcode = -ret;
+    const char* s_err = nt_strerrorname(errcode);
+    if (s_err == NULL)
+    {
+        goto APPEND_CODE;
+    }
+
+    nt_strcat(sc, "%s (%s)", s_err, strerror(errcode));
+    return;
+
+APPEND_CODE:
+    nt_strcat(sc, "%" PRId64, ret);
 }

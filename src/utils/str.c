@@ -6,16 +6,39 @@
 
 typedef struct errno_name
 {
-    int         code;
-    const char* name;
+    int         code; /* Error code. */
+    const char* name; /* Error name. */
 } errno_name_t;
 
 static errno_name_t s_errno_name[] = {
-    { EBUSY,  "EBUSY"  },
-    { EFAULT, "EFAULT" },
-    { EIO,    "EIO"    },
-    { EPERM,  "EPERM"  },
-    { ESRCH,  "ESRCH"  },
+    { EACCES,          "EACCES"          },
+    { EADDRINUSE,      "EADDRINUSE"      },
+    { EADDRNOTAVAIL,   "EADDRNOTAVAIL"   },
+    { EAFNOSUPPORT,    "EAFNOSUPPORT"    },
+    { EAGAIN,          "EAGAIN"          },
+    { EALREADY,        "EALREADY"        },
+    { EBADF,           "EBADF"           },
+    { EBUSY,           "EBUSY"           },
+    { ECONNREFUSED,    "ECONNREFUSED"    },
+    { EDQUOT,          "EDQUOT"          },
+    { EFAULT,          "EFAULT"          },
+    { EINPROGRESS,     "EINPROGRESS"     },
+    { EINTR,           "EINTR"           },
+    { EIO,             "EIO"             },
+    { EISCONN,         "EISCONN"         },
+    { EMFILE,          "EMFILE"          },
+    { ENETUNREACH,     "ENETUNREACH"     },
+    { ENFILE,          "ENFILE"          },
+    { ENOBUFS,         "ENOBUFS"         },
+    { ENOENT,          "ENOENT"          },
+    { ENOMEM,          "ENOMEM"          },
+    { ENOSPC,          "ENOSPC"          },
+    { ENOTSOCK,        "ENOTSOCK"        },
+    { EPERM,           "EPERM"           },
+    { EPROTONOSUPPORT, "EPROTONOSUPPORT" },
+    { EPROTOTYPE,      "EPROTOTYPE"      },
+    { ESRCH,           "ESRCH"           },
+    { ETIMEDOUT,       "ETIMEDOUT"       },
 };
 
 const char* nt_strrstr(const char* haystack, const char* needle)

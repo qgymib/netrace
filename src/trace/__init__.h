@@ -77,6 +77,15 @@ int nt_strcat(nt_strcat_t* sc, const char* fmt, ...);
  */
 void nt_strcat_dump(nt_strcat_t* sc, void* buff, size_t size);
 
+/**
+ * @brief
+ * @param sc
+ * @param prefix
+ * @param ret
+ * @param err
+ */
+void nt_strcat_ret(nt_strcat_t* sc, int64_t ret, int err);
+
 int nt_syscall_decode_clone(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_close(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_close_range(const nt_syscall_info_t* si, int op, char* buff, size_t size);

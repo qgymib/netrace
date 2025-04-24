@@ -45,7 +45,8 @@ int nt_syscall_decode_connect(const nt_syscall_info_t* si, int op, char* buff, s
         s_decode_connect_arg0(&sc, si);
         s_decode_connect_arg1(&sc, si);
         s_decode_connect_arg2(&sc, si);
-        nt_strcat(&sc, ") = %d", (int)si->leave.exit.rval);
+        nt_strcat(&sc, ") = ");
+        nt_strcat_ret(&sc, si->leave.exit.rval, si->leave.exit.is_error);
     }
     return sc.size;
 }
