@@ -41,8 +41,11 @@ static syscall_entry_t s_syscall_entry[] = {
 #if defined(SYS_dup2)
     { SYS_dup2,            "dup2",            nt_syscall_decode_dup2        },
 #endif
+    { SYS_dup3,            "dup3",            nt_syscall_decode_dup3        },
     { SYS_exit_group,      "exit_group",      NULL                          },
     { SYS_execve,          "execve",          nt_syscall_decode_execve      },
+    { SYS_faccessat,       "faccessat",       NULL                          },
+    { SYS_fchmodat,        "fchmodat",        NULL                          },
     { SYS_fcntl,           "fcntl",           NULL                          },
     { SYS_fstat,           "fstat",           NULL                          },
     { SYS_fsync,           "fsync",           NULL                          },
@@ -55,7 +58,7 @@ static syscall_entry_t s_syscall_entry[] = {
     { SYS_getrandom,       "getrandom",       NULL                          },
     { SYS_getsockname,     "getsockname",     nt_syscall_decode_getsockname },
     { SYS_getsockopt,      "getsockopt",      NULL                          },
-    { SYS_getuid,          "getuid",          NULL                          },
+    { SYS_getuid,          "getuid",          nt_syscall_decode_getuid      },
     { SYS_ioctl,           "ioctl",           nt_syscall_decode_ioctl       },
     { SYS_lseek,           "lseek",           NULL                          },
 #if defined(SYS_link)
@@ -65,15 +68,17 @@ static syscall_entry_t s_syscall_entry[] = {
 #if defined(SYS_mkdir)
     { SYS_mkdir,           "mkdir",           NULL                          },
 #endif
+    { SYS_mkdirat,         "mkdirat",         NULL                          },
     { SYS_mmap,            "mmap",            NULL                          },
     { SYS_mprotect,        "mprotect",        NULL                          },
     { SYS_munmap,          "munmap",          NULL                          },
     { SYS_newfstatat,      "newfstatat",      NULL                          },
     { SYS_openat,          "openat",          NULL                          },
-    { SYS_pipe2,           "pipe2",           NULL                          },
+    { SYS_pipe2,           "pipe2",           nt_syscall_decode_pipe2       },
 #if defined(SYS_poll)
     { SYS_poll,            "poll",            NULL                          },
 #endif
+    { SYS_ppoll,           "ppoll",           NULL                          },
     { SYS_pread64,         "pread64",         nt_syscall_decode_pread64     },
     { SYS_prlimit64,       "prlimit64",       NULL                          },
     { SYS_pselect6,        "pselect6",        NULL                          },
@@ -82,6 +87,7 @@ static syscall_entry_t s_syscall_entry[] = {
 #if defined(SYS_readlink)
     { SYS_readlink,        "readlink",        NULL                          },
 #endif
+    { SYS_readlinkat,      "readlinkat",      NULL                          },
 #if defined(SYS_recv)
     { SYS_recv,            "recv",            NULL                          },
 #endif
@@ -110,11 +116,13 @@ static syscall_entry_t s_syscall_entry[] = {
 #if defined(SYS_symlink)
     { SYS_symlink,         "symlink",         NULL                          },
 #endif
+    { SYS_symlinkat,       "symlinkat",       NULL                          },
     { SYS_umask,           "umask",           NULL                          },
     { SYS_uname,           "uname",           NULL                          },
 #if defined(SYS_unlink)
     { SYS_unlink,          "unlink",          NULL                          },
 #endif
+    { SYS_unlinkat,        "unlinkat",        NULL                          },
     { SYS_wait4,           "wait4",           NULL                          },
     { SYS_write,           "write",           nt_syscall_decode_write       },
 };
@@ -170,7 +178,11 @@ int nt_trace_dump(const nt_syscall_info_t* si, int op, char* buff, size_t size)
     const syscall_entry_t* entry = s_nt_syscall_entry(si->enter.entry.nr);
     if (entry == NULL)
     {
-        return snprintf(buff, size, "(%d)", (int)si->enter.entry.nr);
+        if (op == PTRACE_SYSCALL_INFO_ENTRY)
+        {
+            nt_strcat(&sc, "(%d)", (int)si->enter.entry.nr);
+        }
+        goto FINISH;
     }
 
     /* Append name. */

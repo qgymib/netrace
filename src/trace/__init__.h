@@ -23,6 +23,11 @@ typedef struct
     size_t size;     /* Number of bytes, excluding null byte. */
 } nt_strcat_t;
 
+/**
+ * @brief Static initializer for #nt_strcat_t.
+ * @param[in] buff  Buffer
+ * @param[in] size  Buffer size.
+ */
 #define NT_STRCAT_INIT(buff, size) { buff, size, 0 }
 
 /**
@@ -78,10 +83,13 @@ int nt_syscall_decode_close_range(const nt_syscall_info_t* si, int op, char* buf
 int nt_syscall_decode_connect(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_dup(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_dup2(const nt_syscall_info_t* si, int op, char* buff, size_t size);
+int nt_syscall_decode_dup3(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_execve(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_getpeername(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_getsockname(const nt_syscall_info_t* si, int op, char* buff, size_t size);
+int nt_syscall_decode_getuid(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_ioctl(const nt_syscall_info_t* si, int op, char* buff, size_t size);
+int nt_syscall_decode_pipe2(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_pread64(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_pwrite64(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_read(const nt_syscall_info_t* si, int op, char* buff, size_t size);
