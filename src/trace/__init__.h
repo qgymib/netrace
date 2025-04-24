@@ -85,6 +85,7 @@ int nt_syscall_decode_dup(const nt_syscall_info_t* si, int op, char* buff, size_
 int nt_syscall_decode_dup2(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_dup3(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_execve(const nt_syscall_info_t* si, int op, char* buff, size_t size);
+int nt_syscall_decode_fcntl(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_getpeername(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_getsockname(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_getuid(const nt_syscall_info_t* si, int op, char* buff, size_t size);

@@ -46,7 +46,7 @@ static syscall_entry_t s_syscall_entry[] = {
     { SYS_execve,          "execve",          nt_syscall_decode_execve      },
     { SYS_faccessat,       "faccessat",       NULL                          },
     { SYS_fchmodat,        "fchmodat",        NULL                          },
-    { SYS_fcntl,           "fcntl",           NULL                          },
+    { SYS_fcntl,           "fcntl",           nt_syscall_decode_fcntl       },
     { SYS_fstat,           "fstat",           NULL                          },
     { SYS_fsync,           "fsync",           NULL                          },
     { SYS_futex,           "futex",           NULL                          },
