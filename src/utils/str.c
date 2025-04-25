@@ -34,6 +34,7 @@ static errno_name_t s_errno_name[] = {
     { ENOMEM,          "ENOMEM"          },
     { ENOSPC,          "ENOSPC"          },
     { ENOTSOCK,        "ENOTSOCK"        },
+    { ENOTTY,          "ENOTTY"          },
     { EPERM,           "EPERM"           },
     { EPROTONOSUPPORT, "EPROTONOSUPPORT" },
     { EPROTOTYPE,      "EPROTOTYPE"      },

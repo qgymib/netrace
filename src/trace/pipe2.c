@@ -19,36 +19,14 @@ static void s_decode_pipe2_arg0(nt_strcat_t* sc, const nt_syscall_info_t* si)
 
 static void s_decode_pipe2_arg1(nt_strcat_t* sc, const nt_syscall_info_t* si)
 {
-#define CHECK_FLAG(flag)                                                                           \
-    do                                                                                             \
-    {                                                                                              \
-        if (flags & flag)                                                                          \
-        {                                                                                          \
-            nt_strcat(sc, "%s%s", flag_count++ == 0 ? "" : "|", #flag);                            \
-            flags &= ~flag;                                                                        \
-        }                                                                                          \
-    } while (0)
-
-    int    flags = si->enter.entry.args[1];
-    size_t flag_count = 0;
-
-    CHECK_FLAG(O_CLOEXEC);
-    CHECK_FLAG(O_DIRECT);
-    CHECK_FLAG(O_NONBLOCK);
+    nt_bitdecoder_t bd = NT_BITDECODER_INIT(si->enter.entry.args[1], sc);
+    NT_BITDECODER_DECODE(&bd, O_CLOEXEC);
+    NT_BITDECODER_DECODE(&bd, O_DIRECT);
+    NT_BITDECODER_DECODE(&bd, O_NONBLOCK);
 #if defined(O_NOTIFICATION_PIPE)
-    CHECK_FLAG(O_NOTIFICATION_PIPE);
+    NT_BITDECODER_DECODE(&bd, O_NOTIFICATION_PIPE);
 #endif
-
-    if (flag_count == 0)
-    {
-        nt_strcat(sc, "%d", flags);
-    }
-    else if (flags != 0)
-    {
-        nt_strcat(sc, "|%x", flags);
-    }
-
-#undef CHECK_FLAG
+    NT_BITDECODER_FINISH(&bd);
 }
 
 int nt_syscall_decode_pipe2(const nt_syscall_info_t* si, int op, char* buff, size_t size)

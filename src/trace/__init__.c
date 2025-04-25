@@ -278,7 +278,7 @@ void nt_strcat_ret(nt_strcat_t* sc, int64_t ret, int err)
         goto APPEND_CODE;
     }
 
-    nt_strcat(sc, "%s (%s)", s_err, strerror(errcode));
+    nt_strcat(sc, "-%s (%s)", s_err, strerror(errcode));
     return;
 
 APPEND_CODE:

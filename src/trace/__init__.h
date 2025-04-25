@@ -30,6 +30,38 @@ typedef struct
  */
 #define NT_STRCAT_INIT(buff, size) { buff, size, 0 }
 
+typedef struct
+{
+    int          flags;
+    size_t       count;
+    nt_strcat_t* sc;
+} nt_bitdecoder_t;
+
+#define NT_BITDECODER_INIT(flags, sc) { flags, 0, sc }
+#define NT_BITDECODER_DECODE(bd, flag)                                                             \
+    do                                                                                             \
+    {                                                                                              \
+        int f = flag;                                                                              \
+        if ((bd)->flags & f)                                                                       \
+        {                                                                                          \
+            (bd)->flags &= ~f;                                                                     \
+            nt_strcat((bd)->sc, "%s%s", ((bd)->count++ == 0) ? "" : "|", #flag);                   \
+        }                                                                                          \
+    } while (0)
+
+#define NT_BITDECODER_FINISH(bd)                                                                   \
+    do                                                                                             \
+    {                                                                                              \
+        if ((bd)->count == 0)                                                                      \
+        {                                                                                          \
+            nt_strcat((bd)->sc, "0x%x", (bd)->flags);                                              \
+        }                                                                                          \
+        else if ((bd)->flags != 0)                                                                 \
+        {                                                                                          \
+            nt_strcat((bd)->sc, "|0x%x", (bd)->flags);                                             \
+        }                                                                                          \
+    } while (0)
+
 /**
  * @brief Syscall parameters and result decode function.
  *
