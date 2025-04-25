@@ -52,6 +52,7 @@ add_library(lib${PROJECT_NAME} STATIC
     "src/trace/sendmmsg.c"
     "src/trace/setsockopt.c"
     "src/trace/socket.c"
+    "src/trace/socketpair.c"
     "src/trace/write.c"
     "src/utils/cmdoption.c"
     "src/utils/cstr.c"

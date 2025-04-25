@@ -47,7 +47,7 @@ static const ioctl_request_t s_ioctl_requests[] = {
     { TIOCSPGRP,          "TIOCSPGRP",          NULL,                 NULL               },
     { TIOCOUTQ,           "TIOCOUTQ",           s_ioctl_decode_int_p, NULL               },
     { TIOCSTI,            "TIOCSTI",            NULL,                 NULL               },
-    { TIOCGWINSZ,         "TIOCGWINSZ",         NULL,                 NULL               },
+    { TIOCGWINSZ,         "TIOCGWINSZ",         NULL,                 s_ioctl_decode_ret },
     { TIOCSWINSZ,         "TIOCSWINSZ",         NULL,                 NULL               },
     { TIOCMGET,           "TIOCMGET",           NULL,                 NULL               },
     { TIOCMBIS,           "TIOCMBIS",           NULL,                 NULL               },

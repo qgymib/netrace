@@ -44,6 +44,10 @@ static syscall_entry_t s_syscall_entry[] = {
     { SYS_dup2,            "dup2",            nt_syscall_decode_dup2        },
 #endif
     { SYS_dup3,            "dup3",            nt_syscall_decode_dup3        },
+    { SYS_epoll_create1,   "epoll_create1",   NULL                          },
+    { SYS_epoll_ctl,       "epoll_ctl",       NULL                          },
+    { SYS_epoll_wait,      "epoll_wait",      NULL                          },
+    { SYS_eventfd2,        "eventfd2",        NULL                          },
     { SYS_exit_group,      "exit_group",      NULL                          },
     { SYS_execve,          "execve",          nt_syscall_decode_execve      },
     { SYS_faccessat,       "faccessat",       NULL                          },
@@ -76,6 +80,7 @@ static syscall_entry_t s_syscall_entry[] = {
     { SYS_mprotect,        "mprotect",        NULL                          },
     { SYS_munmap,          "munmap",          NULL                          },
     { SYS_newfstatat,      "newfstatat",      NULL                          },
+    { SYS_open,            "open",            NULL                          },
     { SYS_openat,          "openat",          NULL                          },
     { SYS_pipe2,           "pipe2",           nt_syscall_decode_pipe2       },
 #if defined(SYS_poll)
@@ -114,7 +119,9 @@ static syscall_entry_t s_syscall_entry[] = {
     { SYS_set_tid_address, "set_tid_address", NULL                          },
     { SYS_setsockopt,      "setsockopt",      nt_syscall_decode_setsockopt  },
     { SYS_setitimer,       "setitimer",       NULL                          },
+    { SYS_sigaltstack,     "sigaltstack",     NULL                          },
     { SYS_socket,          "socket",          nt_syscall_decode_socket      },
+    { SYS_socketpair,      "socketpair",      nt_syscall_decode_socketpair  },
     { SYS_statfs,          "statfs",          NULL                          },
 #if defined(SYS_symlink)
     { SYS_symlink,         "symlink",         NULL                          },
