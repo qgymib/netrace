@@ -5,7 +5,8 @@
 
 static void s_decode_connect_arg0(nt_strcat_t* sc, const nt_syscall_info_t* si)
 {
-    nt_strcat(sc, "%d, ", si->enter.entry.args[0]);
+    int sockfd = si->enter.entry.args[0];
+    nt_strcat(sc, "%d, ", sockfd);
 }
 
 static void s_decode_connect_arg1(nt_strcat_t* sc, const nt_syscall_info_t* si)

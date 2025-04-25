@@ -36,33 +36,16 @@ static void s_decode_recvfrom_arg2(nt_strcat_t* sc, const nt_syscall_info_t* si)
 
 static void s_decode_recvfrom_arg3(nt_strcat_t* sc, const nt_syscall_info_t* si)
 {
-#define CHECK_FLAG(f)                                                                              \
-    do                                                                                             \
-    {                                                                                              \
-        if (flags & f)                                                                             \
-        {                                                                                          \
-            nt_strcat(sc, "%s%s", flag_cnt++ == 0 ? "" : "|", #f);                                 \
-        }                                                                                          \
-    } while (0)
-
-    int    flags = si->enter.entry.args[3];
-    size_t flag_cnt = 0;
-
-    CHECK_FLAG(MSG_CMSG_CLOEXEC);
-    CHECK_FLAG(MSG_DONTWAIT);
-    CHECK_FLAG(MSG_ERRQUEUE);
-    CHECK_FLAG(MSG_OOB);
-    CHECK_FLAG(MSG_PEEK);
-    CHECK_FLAG(MSG_TRUNC);
-    CHECK_FLAG(MSG_WAITALL);
-
-    if (flag_cnt == 0)
-    {
-        nt_strcat(sc, "0");
-    }
+    nt_bitdecoder_t bd = NT_BITDECODER_INIT(si->enter.entry.args[3], sc);
+    NT_BITDECODER_DECODE(&bd, MSG_CMSG_CLOEXEC);
+    NT_BITDECODER_DECODE(&bd, MSG_DONTWAIT);
+    NT_BITDECODER_DECODE(&bd, MSG_ERRQUEUE);
+    NT_BITDECODER_DECODE(&bd, MSG_OOB);
+    NT_BITDECODER_DECODE(&bd, MSG_PEEK);
+    NT_BITDECODER_DECODE(&bd, MSG_TRUNC);
+    NT_BITDECODER_DECODE(&bd, MSG_WAITALL);
+    NT_BITDECODER_FINISH(&bd);
     nt_strcat(sc, ", ");
-
-#undef CHECK_FLAG
 }
 
 static void s_decode_recvfrom_arg4(nt_strcat_t* sc, const nt_syscall_info_t* si, socklen_t addrlen)
@@ -96,7 +79,7 @@ static void s_decode_recvfrom_arg5(nt_strcat_t* sc, const nt_syscall_info_t* si,
         return;
     }
 
-    nt_strcat(sc, "%lu", addrlen);
+    nt_strcat(sc, "%u", (unsigned)addrlen);
 }
 
 int nt_syscall_decode_recvfrom(const nt_syscall_info_t* si, int op, char* buff, size_t size)
