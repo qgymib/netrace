@@ -132,6 +132,7 @@ static syscall_entry_t s_syscall_entry[] = {
     { SYS_set_tid_address,   "set_tid_address",   NULL                          },
     { SYS_setsockopt,        "setsockopt",        nt_syscall_decode_setsockopt  },
     { SYS_setitimer,         "setitimer",         NULL                          },
+    { SYS_shutdown,          "shutdown",          nt_syscall_decode_shutdown    },
     { SYS_sigaltstack,       "sigaltstack",       NULL                          },
     { SYS_socket,            "socket",            nt_syscall_decode_socket      },
     { SYS_socketpair,        "socketpair",        nt_syscall_decode_socketpair  },
