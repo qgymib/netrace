@@ -49,7 +49,9 @@ static syscall_entry_t s_syscall_entry[] = {
     { SYS_epoll_create1,     "epoll_create1",     NULL                          },
     { SYS_epoll_ctl,         "epoll_ctl",         NULL                          },
     { SYS_epoll_pwait,       "epoll_pwait",       NULL                          },
+#if defined(SYS_epoll_wait)
     { SYS_epoll_wait,        "epoll_wait",        NULL                          },
+#endif
     { SYS_eventfd2,          "eventfd2",          NULL                          },
     { SYS_exit_group,        "exit_group",        NULL                          },
     { SYS_execve,            "execve",            nt_syscall_decode_execve      },
@@ -75,6 +77,9 @@ static syscall_entry_t s_syscall_entry[] = {
 #endif
     { SYS_listen,            "listen",            nt_syscall_decode_listen      },
     { SYS_lseek,             "lseek",             NULL                          },
+#if defined(SYS_lstat)
+    { SYS_lstat,             "lstat",             NULL                          },
+#endif
     { SYS_madvise,           "madvise",           NULL                          },
 #if defined(SYS_mkdir)
     { SYS_mkdir,             "mkdir",             NULL                          },
@@ -84,7 +89,9 @@ static syscall_entry_t s_syscall_entry[] = {
     { SYS_mprotect,          "mprotect",          NULL                          },
     { SYS_munmap,            "munmap",            NULL                          },
     { SYS_newfstatat,        "newfstatat",        NULL                          },
+#if defined(SYS_open)
     { SYS_open,              "open",              NULL                          },
+#endif
     { SYS_openat,            "openat",            NULL                          },
     { SYS_pipe2,             "pipe2",             nt_syscall_decode_pipe2       },
 #if defined(SYS_poll)
@@ -120,7 +127,7 @@ static syscall_entry_t s_syscall_entry[] = {
 #endif
     { SYS_sendmmsg,          "sendmmsg",          nt_syscall_decode_sendmmsg    },
     { SYS_sendmsg,           "sendmsg",           NULL                          },
-    { SYS_sendto,            "sendto",            NULL                          },
+    { SYS_sendto,            "sendto",            nt_syscall_decode_sendto      },
     { SYS_set_robust_list,   "set_robust_list",   NULL                          },
     { SYS_set_tid_address,   "set_tid_address",   NULL                          },
     { SYS_setsockopt,        "setsockopt",        nt_syscall_decode_setsockopt  },
@@ -128,7 +135,9 @@ static syscall_entry_t s_syscall_entry[] = {
     { SYS_sigaltstack,       "sigaltstack",       NULL                          },
     { SYS_socket,            "socket",            nt_syscall_decode_socket      },
     { SYS_socketpair,        "socketpair",        nt_syscall_decode_socketpair  },
+#if defined(SYS_stat)
     { SYS_stat,              "stat",              NULL                          },
+#endif
     { SYS_statfs,            "statfs",            NULL                          },
 #if defined(SYS_symlink)
     { SYS_symlink,           "symlink",           NULL                          },

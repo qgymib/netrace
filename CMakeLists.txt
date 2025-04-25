@@ -54,6 +54,7 @@ add_library(lib${PROJECT_NAME} STATIC
     "src/trace/read.c"
     "src/trace/recvfrom.c"
     "src/trace/sendmmsg.c"
+    "src/trace/sendto.c"
     "src/trace/setsockopt.c"
     "src/trace/socket.c"
     "src/trace/socketpair.c"

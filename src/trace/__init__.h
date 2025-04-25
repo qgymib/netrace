@@ -142,6 +142,7 @@ int nt_syscall_decode_pwrite64(const nt_syscall_info_t* si, int op, char* buff, 
 int nt_syscall_decode_read(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_recvfrom(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_sendmmsg(const nt_syscall_info_t* si, int op, char* buff, size_t size);
+int nt_syscall_decode_sendto(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_setsockopt(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_socket(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_socketpair(const nt_syscall_info_t* si, int op, char* buff, size_t size);
