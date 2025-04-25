@@ -1,16 +1,23 @@
+#include <netinet/ip.h>
 #include "utils/defs.h"
 #include "utils/socket.h"
+#include "utils/syscall.h"
 #include "__init__.h"
 
-#include <utils/syscall.h>
-
-typedef struct optname_pair
+typedef struct level_name
 {
-    int         level;
-    int         optname;
-    const char* name;
-    void (*decode)(nt_strcat_t* sc, const nt_syscall_info_t* si, socklen_t optlen);
-} optname_pair_t;
+    int         level; /* Level ID. */
+    const char* name;  /* Level name. */
+} level_name_t;
+
+typedef struct sock_option
+{
+    int         level;  /* Option level. */
+    int         option; /* Option ID. */
+    const char* name;   /* Option name. */
+    void (*decode)(nt_strcat_t* sc, const nt_syscall_info_t* si,
+                   socklen_t optlen); /* Parameter decoder. */
+} sock_option_t;
 
 static void s_decode_setsockopt_timeval(nt_strcat_t* sc, const nt_syscall_info_t* si,
                                         socklen_t optlen)
@@ -27,6 +34,30 @@ static void s_decode_setsockopt_int(nt_strcat_t* sc, const nt_syscall_info_t* si
     nt_strcat(sc, "%d", val);
 }
 
+static void s_decode_setsockopt_tos(nt_strcat_t* sc, const nt_syscall_info_t* si, socklen_t optlen)
+{
+    static const level_name_t s_tos[] = {
+        { IPTOS_LOWDELAY,    "IPTOS_LOWDELAY"    },
+        { IPTOS_THROUGHPUT,  "IPTOS_THROUGHPUT"  },
+        { IPTOS_RELIABILITY, "IPTOS_RELIABILITY" },
+        { IPTOS_LOWCOST,     "IPTOS_LOWCOST"     },
+    };
+
+    int val = 0;
+    nt_syscall_getdata(si->pid, si->enter.entry.args[3], &val, optlen);
+
+    size_t i;
+    for (i = 0; i < ARRAY_SIZE(s_tos); i++)
+    {
+        if (s_tos[i].level == val)
+        {
+            nt_strcat(sc, "%s", s_tos[i].name);
+            return;
+        }
+    }
+    nt_strcat(sc, "%d", val);
+}
+
 static void s_decode_setsockopt_unknown(nt_strcat_t* sc, const nt_syscall_info_t* si,
                                         socklen_t optlen)
 {
@@ -40,9 +71,13 @@ static void s_decode_setsockopt_unknown(nt_strcat_t* sc, const nt_syscall_info_t
     }
 }
 
-static optname_pair_t s_setsockopt_decode[] = {
+static const sock_option_t s_setsockopt_decode[] = {
+    { SOL_IP,     IP_RECVERR,     "IP_RECVERR",     s_decode_setsockopt_int     },
+    { SOL_IP,     IP_TOS,         "IP_TOS",         s_decode_setsockopt_tos     },
+    { SOL_IPV6,   IPV6_V6ONLY,    "IPV6_V6ONLY",    s_decode_setsockopt_int     },
     { SOL_SOCKET, SO_KEEPALIVE,   "SO_KEEPALIVE",   s_decode_setsockopt_int     },
     { SOL_SOCKET, SO_RCVTIMEO,    "SO_RCVTIMEO",    s_decode_setsockopt_timeval },
+    { SOL_SOCKET, SO_REUSEADDR,   "SO_REUSEADDR",   s_decode_setsockopt_int     },
     { SOL_SOCKET, SO_SNDTIMEO,    "SO_SNDTIMEO",    s_decode_setsockopt_timeval },
     { SOL_SOCKET, SO_TIMESTAMP,   "SO_TIMESTAMP",   NULL                        },
     { SOL_SOCKET, SO_TIMESTAMPNS, "SO_TIMESTAMPNS", NULL                        },
@@ -54,63 +89,81 @@ static void s_decode_setsockopt_arg0(nt_strcat_t* sc, const nt_syscall_info_t* s
     nt_strcat(sc, "%d, ", sockfd);
 }
 
-static void s_decode_setsockopt_arg1(nt_strcat_t* sc, const nt_syscall_info_t* si)
+static void s_decode_setsockopt_arg1(nt_strcat_t* sc, int level)
 {
-    int level = si->enter.entry.args[1];
-    if (level == SOL_SOCKET)
-    {
-        nt_strcat(sc, "SOL_SOCKET, ");
-        return;
-    }
-    nt_strcat(sc, "%d, ", level);
-}
-
-static void s_decode_setsockopt_arg2(nt_strcat_t* sc, const nt_syscall_info_t* si)
-{
-    int level = si->enter.entry.args[1];
-    int optname = si->enter.entry.args[2];
+    static const level_name_t s_level[] = {
+        { SOL_AAL,       "SOL_AAL"       },
+        { SOL_ALG,       "SOL_ALG"       },
+        { SOL_ATM,       "SOL_ATM"       },
+        { SOL_BLUETOOTH, "SOL_BLUETOOTH" },
+        { SOL_CAIF,      "SOL_CAIF"      },
+        { SOL_DCCP,      "SOL_DCCP"      },
+        { SOL_DECNET,    "SOL_DECNET"    },
+        { SOL_ICMPV6,    "SOL_ICMPV6"    },
+        { SOL_IP,        "SOL_IP"        },
+        { SOL_IPV6,      "SOL_IPV6"      },
+        { SOL_IRDA,      "SOL_IRDA"      },
+        { SOL_IUCV,      "SOL_IUCV"      },
+        { SOL_KCM,       "SOL_KCM"       },
+        { SOL_LLC,       "SOL_LLC"       },
+        { SOL_NETBEUI,   "SOL_NETBEUI"   },
+        { SOL_NETLINK,   "SOL_NETLINK"   },
+        { SOL_NFC,       "SOL_NFC"       },
+        { SOL_PACKET,    "SOL_PACKET"    },
+        { SOL_PNPIPE,    "SOL_PNPIPE"    },
+        { SOL_PPPOL2TP,  "SOL_PPPOL2TP"  },
+        { SOL_RAW,       "SOL_RAW"       },
+        { SOL_RDS,       "SOL_RDS"       },
+        { SOL_RXRPC,     "SOL_RXRPC"     },
+        { SOL_SOCKET,    "SOL_SOCKET"    },
+        { SOL_TIPC,      "SOL_TIPC"      },
+        { SOL_TLS,       "SOL_TLS"       },
+        { SOL_X25,       "SOL_X25"       },
+        { SOL_XDP,       "SOL_XDP"       },
+    };
 
     size_t i;
-    for (i = 0; i < ARRAY_SIZE(s_setsockopt_decode); i++)
+    for (i = 0; i < ARRAY_SIZE(s_level); i++)
     {
-        if (s_setsockopt_decode[i].level == level && s_setsockopt_decode[i].optname == optname)
+        if (s_level[i].level == level)
         {
-            nt_strcat(sc, "%s, ", s_setsockopt_decode[i].name);
+            nt_strcat(sc, "%s, ", s_level[i].name);
             return;
         }
     }
-    nt_strcat(sc, "%d, ", optname);
+
+    nt_strcat(sc, "%d, ", level);
 }
 
-static void s_decode_setsockopt_arg3(nt_strcat_t* sc, const nt_syscall_info_t* si)
+static void s_decode_setsockopt_arg2(nt_strcat_t* sc, int option, const sock_option_t* opt)
 {
-    int level = si->enter.entry.args[1];
-    int optname = si->enter.entry.args[2];
+    if (opt != NULL)
+    {
+        nt_strcat(sc, "%s, ", opt->name);
+        return;
+    }
+    nt_strcat(sc, "%d, ", option);
+}
 
+static void s_decode_setsockopt_arg3(nt_strcat_t* sc, const nt_syscall_info_t* si,
+                                     const sock_option_t* opt)
+{
     if (si->enter.entry.args[3] == 0)
     {
         nt_strcat(sc, "NULL, ");
         return;
     }
 
-    size_t    i;
     socklen_t optlen = si->enter.entry.args[4];
-
-    for (i = 0; i < ARRAY_SIZE(s_setsockopt_decode); i++)
+    if (opt == NULL)
     {
-        if (s_setsockopt_decode[i].level == level && s_setsockopt_decode[i].optname == optname)
-        {
-            if (s_setsockopt_decode[i].decode != NULL)
-            {
-                s_setsockopt_decode[i].decode(sc, si, optlen);
-                goto FINISH;
-            }
-            break;
-        }
+        s_decode_setsockopt_unknown(sc, si, optlen);
     }
-    s_decode_setsockopt_unknown(sc, si, optlen);
+    else
+    {
+        opt->decode(sc, si, optlen);
+    }
 
-FINISH:
     nt_strcat(sc, ", ");
 }
 
@@ -120,18 +173,39 @@ static void s_decode_setsockopt_arg4(nt_strcat_t* sc, const nt_syscall_info_t* s
     nt_strcat(sc, "%u", (unsigned)optlen);
 }
 
+static const sock_option_t* s_setsockopt_find(int level, int option)
+{
+    size_t i;
+    for (i = 0; i < ARRAY_SIZE(s_setsockopt_decode); i++)
+    {
+        if (s_setsockopt_decode[i].level == level && s_setsockopt_decode[i].option == option)
+        {
+            return &s_setsockopt_decode[i];
+        }
+    }
+    return NULL;
+}
+
 int nt_syscall_decode_setsockopt(const nt_syscall_info_t* si, int op, char* buff, size_t size)
 {
-    nt_strcat_t sc = NT_STRCAT_INIT(buff, size);
-    if (op == PTRACE_SYSCALL_INFO_EXIT)
+    const sock_option_t* opt = NULL;
+    nt_strcat_t          sc = NT_STRCAT_INIT(buff, size);
+    if (op != PTRACE_SYSCALL_INFO_EXIT)
     {
-        nt_strcat(&sc, "(");
-        s_decode_setsockopt_arg0(&sc, si);
-        s_decode_setsockopt_arg1(&sc, si);
-        s_decode_setsockopt_arg2(&sc, si);
-        s_decode_setsockopt_arg3(&sc, si);
-        s_decode_setsockopt_arg4(&sc, si);
-        nt_strcat(&sc, ") = %d", (int)si->leave.exit.rval);
+        return 0;
     }
+
+    nt_strcat(&sc, "(");
+    int level = si->enter.entry.args[1];
+    int option = si->enter.entry.args[2];
+    opt = s_setsockopt_find(level, option);
+
+    s_decode_setsockopt_arg0(&sc, si);
+    s_decode_setsockopt_arg1(&sc, level);
+    s_decode_setsockopt_arg2(&sc, option, opt);
+    s_decode_setsockopt_arg3(&sc, si, opt);
+    s_decode_setsockopt_arg4(&sc, si);
+    nt_strcat(&sc, ") = %d", (int)si->leave.exit.rval);
+
     return sc.size;
 }
