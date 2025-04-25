@@ -22,7 +22,8 @@ typedef struct syscall_entry
  * Syscall is not portable, so it is necessary to check if it is defined.
  */
 static syscall_entry_t s_syscall_entry[] = {
-    { SYS_accept,            "accept",            NULL                          },
+    { SYS_accept,            "accept",            nt_syscall_decode_accept      },
+    { SYS_accept4,           "accept4",           nt_syscall_decode_accept4     },
 #if defined(SYS_access)
     { SYS_access,            "access",            NULL                          },
 #endif
@@ -47,6 +48,7 @@ static syscall_entry_t s_syscall_entry[] = {
     { SYS_dup3,              "dup3",              nt_syscall_decode_dup3        },
     { SYS_epoll_create1,     "epoll_create1",     NULL                          },
     { SYS_epoll_ctl,         "epoll_ctl",         NULL                          },
+    { SYS_epoll_pwait,       "epoll_pwait",       NULL                          },
     { SYS_epoll_wait,        "epoll_wait",        NULL                          },
     { SYS_eventfd2,          "eventfd2",          NULL                          },
     { SYS_exit_group,        "exit_group",        NULL                          },
@@ -90,6 +92,7 @@ static syscall_entry_t s_syscall_entry[] = {
 #endif
     { SYS_ppoll,             "ppoll",             NULL                          },
     { SYS_pread64,           "pread64",           nt_syscall_decode_pread64     },
+    { SYS_prctl,             "prctl",             NULL                          },
     { SYS_prlimit64,         "prlimit64",         NULL                          },
     { SYS_pselect6,          "pselect6",          NULL                          },
     { SYS_pwrite64,          "pwrite64",          nt_syscall_decode_pwrite64    },

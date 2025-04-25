@@ -30,6 +30,8 @@ add_library(lib${PROJECT_NAME} STATIC
     "src/runtime/raw.c"
     "src/runtime/socks5.c"
     "src/trace/__init__.c"
+    "src/trace/accept.c"
+    "src/trace/accept4.c"
     "src/trace/bind.c"
     "src/trace/clone.c"
     "src/trace/close.c"

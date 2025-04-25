@@ -118,6 +118,8 @@ void nt_strcat_dump(nt_strcat_t* sc, void* buff, size_t size);
  */
 void nt_strcat_ret(nt_strcat_t* sc, int64_t ret, int err);
 
+int nt_syscall_decode_accept(const nt_syscall_info_t* si, int op, char* buff, size_t size);
+int nt_syscall_decode_accept4(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_bind(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_clone(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_close(const nt_syscall_info_t* si, int op, char* buff, size_t size);
