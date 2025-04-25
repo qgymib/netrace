@@ -118,6 +118,7 @@ void nt_strcat_dump(nt_strcat_t* sc, void* buff, size_t size);
  */
 void nt_strcat_ret(nt_strcat_t* sc, int64_t ret, int err);
 
+int nt_syscall_decode_bind(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_clone(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_close(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_close_range(const nt_syscall_info_t* si, int op, char* buff, size_t size);
@@ -132,6 +133,7 @@ int nt_syscall_decode_getpid(const nt_syscall_info_t* si, int op, char* buff, si
 int nt_syscall_decode_getsockname(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_getuid(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_ioctl(const nt_syscall_info_t* si, int op, char* buff, size_t size);
+int nt_syscall_decode_listen(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_pipe2(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_pread64(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_pwrite64(const nt_syscall_info_t* si, int op, char* buff, size_t size);
