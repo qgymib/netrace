@@ -29,6 +29,9 @@ static void s_ioctl_decode_ret(nt_strcat_t* sc, const nt_syscall_info_t* si)
 }
 
 static const ioctl_request_t s_ioctl_requests[] = {
+    /* socket */
+    { SIOCGIFINDEX,       "SIOCGIFINDEX",       NULL,                 NULL               },
+    /* tty */
     { TCGETS,             "TCGETS",             NULL,                 s_ioctl_decode_ret },
     { TCSETS,             "TCSETS",             NULL,                 NULL               },
     { TCSETSW,            "TCSETSW",            NULL,                 NULL               },
