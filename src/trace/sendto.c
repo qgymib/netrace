@@ -1,6 +1,7 @@
 #include "utils/defs.h"
 #include "utils/syscall.h"
 #include "utils/socket.h"
+#include "utils/str.h"
 #include "__init__.h"
 
 static void s_decode_sendto_arg0(nt_strcat_t* sc, const nt_syscall_info_t* si)

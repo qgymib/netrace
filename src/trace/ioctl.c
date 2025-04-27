@@ -1,6 +1,7 @@
 #include <sys/ioctl.h>
 #include <net/if.h>
 #include "utils/defs.h"
+#include "utils/str.h"
 #include "utils/syscall.h"
 #include "__init__.h"
 

@@ -1,4 +1,5 @@
 #include <unistd.h>
+#include "utils/str.h"
 #include "utils/socket.h"
 #include "utils/syscall.h"
 #include "__init__.h"

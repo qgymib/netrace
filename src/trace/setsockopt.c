@@ -2,6 +2,7 @@
 #include "utils/defs.h"
 #include "utils/socket.h"
 #include "utils/syscall.h"
+#include "utils/str.h"
 #include "__init__.h"
 
 typedef struct level_name

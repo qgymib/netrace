@@ -1,7 +1,7 @@
 #include "utils/defs.h"
+#include "utils/str.h"
+#include "utils/syscall.h"
 #include "__init__.h"
-
-#include <utils/syscall.h>
 
 static void s_decode_pwrite64_arg0(nt_strcat_t* sc, const nt_syscall_info_t* si)
 {

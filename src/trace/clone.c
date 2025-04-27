@@ -1,3 +1,4 @@
+#include "utils/str.h"
 #include "__init__.h"
 
 int nt_syscall_decode_clone(const nt_syscall_info_t* si, int op, char* buff, size_t size)

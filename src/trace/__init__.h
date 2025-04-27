@@ -16,52 +16,6 @@ typedef struct nt_syscall_info
     struct __ptrace_syscall_info leave; /* op == PTRACE_SYSCALL_INFO_EXIT */
 } nt_syscall_info_t;
 
-typedef struct
-{
-    char*  buff;     /* Buffer address. */
-    size_t capacity; /* Total buffer size. */
-    size_t size;     /* Number of bytes, excluding null byte. */
-} nt_strcat_t;
-
-/**
- * @brief Static initializer for #nt_strcat_t.
- * @param[in] buff  Buffer
- * @param[in] size  Buffer size.
- */
-#define NT_STRCAT_INIT(buff, size) { buff, size, 0 }
-
-typedef struct
-{
-    int          flags;
-    size_t       count;
-    nt_strcat_t* sc;
-} nt_bitdecoder_t;
-
-#define NT_BITDECODER_INIT(flags, sc) { flags, 0, sc }
-#define NT_BITDECODER_DECODE(bd, flag)                                                             \
-    do                                                                                             \
-    {                                                                                              \
-        int f = flag;                                                                              \
-        if ((bd)->flags & f)                                                                       \
-        {                                                                                          \
-            (bd)->flags &= ~f;                                                                     \
-            nt_strcat((bd)->sc, "%s%s", ((bd)->count++ == 0) ? "" : "|", #flag);                   \
-        }                                                                                          \
-    } while (0)
-
-#define NT_BITDECODER_FINISH(bd)                                                                   \
-    do                                                                                             \
-    {                                                                                              \
-        if ((bd)->count == 0)                                                                      \
-        {                                                                                          \
-            nt_strcat((bd)->sc, "0x%x", (bd)->flags);                                              \
-        }                                                                                          \
-        else if ((bd)->flags != 0)                                                                 \
-        {                                                                                          \
-            nt_strcat((bd)->sc, "|0x%x", (bd)->flags);                                             \
-        }                                                                                          \
-    } while (0)
-
 /**
  * @brief Syscall parameters and result decode function.
  *
@@ -92,32 +46,6 @@ const char* nt_syscall_name(int id);
  */
 int nt_trace_dump(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 
-/**
- * @brief Append string into \p s.
- * @param[in] sc String context.
- * @param[in] fmt Format string.
- * @param[in] ... Format arguments.
- * @return The number of bytes written.
- */
-int nt_strcat(nt_strcat_t* sc, const char* fmt, ...);
-
-/**
- * @brief Dump \p buff as hex string.
- * @param[in] sc    String context.
- * @param[in] buff  Data
- * @param[in] size  Data size.
- */
-void nt_strcat_dump(nt_strcat_t* sc, void* buff, size_t size);
-
-/**
- * @brief
- * @param sc
- * @param prefix
- * @param ret
- * @param err
- */
-void nt_strcat_ret(nt_strcat_t* sc, int64_t ret, int err);
-
 int nt_syscall_decode_accept(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_accept4(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_bind(const nt_syscall_info_t* si, int op, char* buff, size_t size);
@@ -138,16 +66,25 @@ int nt_syscall_decode_ioctl(const nt_syscall_info_t* si, int op, char* buff, siz
 int nt_syscall_decode_listen(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_pipe2(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_pread64(const nt_syscall_info_t* si, int op, char* buff, size_t size);
+int nt_syscall_decode_preadv(const nt_syscall_info_t* si, int op, char* buff, size_t size);
+int nt_syscall_decode_preadv2(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_pwrite64(const nt_syscall_info_t* si, int op, char* buff, size_t size);
+int nt_syscall_decode_pwritev(const nt_syscall_info_t* si, int op, char* buff, size_t size);
+int nt_syscall_decode_pwritev2(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_read(const nt_syscall_info_t* si, int op, char* buff, size_t size);
+int nt_syscall_decode_readv(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_recvfrom(const nt_syscall_info_t* si, int op, char* buff, size_t size);
+int nt_syscall_decode_recvmsg(const nt_syscall_info_t* si, int op, char* buff, size_t size);
+int nt_syscall_decode_sendfile(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_sendmmsg(const nt_syscall_info_t* si, int op, char* buff, size_t size);
+int nt_syscall_decode_sendmsg(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_sendto(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_setsockopt(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_shutdown(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_socket(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_socketpair(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_write(const nt_syscall_info_t* si, int op, char* buff, size_t size);
+int nt_syscall_decode_writev(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 
 #ifdef __cplusplus
 }

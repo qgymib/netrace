@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 #include <fcntl.h>
 #include <unistd.h>
+#include "utils/str.h"
 #include "utils/syscall.h"
 #include "__init__.h"
 

@@ -1,6 +1,6 @@
 #include <stdio.h>
-#include <stdlib.h>
 #include "utils/defs.h"
+#include "utils/str.h"
 #include "utils/syscall.h"
 #include "__init__.h"
 

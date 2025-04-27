@@ -1,6 +1,7 @@
 #include "utils/defs.h"
 #include "utils/socket.h"
 #include "utils/syscall.h"
+#include "utils/str.h"
 #include "__init__.h"
 
 static void s_decode_recvfrom_arg0(nt_strcat_t* sc, const nt_syscall_info_t* si)
@@ -11,7 +12,6 @@ static void s_decode_recvfrom_arg0(nt_strcat_t* sc, const nt_syscall_info_t* si)
 
 static void s_decode_recvfrom_arg1(nt_strcat_t* sc, const nt_syscall_info_t* si)
 {
-    char buff[32];
     if (si->enter.entry.args[1] == 0)
     {
         nt_strcat(sc, "NULL, ");
@@ -23,13 +23,7 @@ static void s_decode_recvfrom_arg1(nt_strcat_t* sc, const nt_syscall_info_t* si)
         return;
     }
 
-    size_t buff_sz = NT_MIN(sizeof(buff), (size_t)si->leave.exit.rval);
-    nt_syscall_getdata(si->pid, si->enter.entry.args[1], buff, buff_sz);
-    nt_strcat_dump(sc, buff, buff_sz);
-    if (buff_sz < (size_t)si->leave.exit.rval)
-    {
-        nt_strcat(sc, "...");
-    }
+    nt_str_sysdump(sc, si->pid, si->enter.entry.args[1], si->leave.exit.rval);
     nt_strcat(sc, ", ");
 }
 

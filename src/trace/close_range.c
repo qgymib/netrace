@@ -1,4 +1,4 @@
-#include <unistd.h>
+#include "utils/str.h"
 #include "__init__.h"
 
 static void s_decode_close_range_arg2(nt_strcat_t* sc, const nt_syscall_info_t* si)
