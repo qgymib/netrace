@@ -79,7 +79,7 @@ static const ioctl_request_t s_ioctl_requests[] = {
     { TIOCGSERIAL,        "TIOCGSERIAL",        NULL,                 NULL               },
     { TIOCSSERIAL,        "TIOCSSERIAL",        NULL,                 NULL               },
     { TIOCPKT,            "TIOCPKT",            NULL,                 NULL               },
-    { FIONBIO,            "FIONBIO",            NULL,                 NULL               },
+    { FIONBIO,            "FIONBIO",            s_ioctl_decode_int_p, NULL               },
     { TIOCNOTTY,          "TIOCNOTTY",          NULL,                 NULL               },
     { TIOCSETD,           "TIOCSETD",           NULL,                 NULL               },
     { TIOCGETD,           "TIOCGETD",           NULL,                 NULL               },
