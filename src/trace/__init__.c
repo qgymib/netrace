@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <pthread.h>
 #include <inttypes.h>
 #include <sys/syscall.h>
 #include "utils/defs.h"
@@ -527,27 +528,41 @@ static syscall_entry_t s_syscall_entry[] = {
     { SYS_writev,                  "writev",                  nt_syscall_decode_writev      },
 };
 
+static int s_on_cmp_syscall_entry(const void* a, const void* b)
+{
+    const syscall_entry_t* e1 = (const syscall_entry_t*)a;
+    const syscall_entry_t* e2 = (const syscall_entry_t*)b;
+    if (e1->id == e2->id)
+    {
+        return 0;
+    }
+    return e1->id < e2->id ? -1 : 1;
+}
+
+static void s_trace_resort_syscall_table()
+{
+    qsort(s_syscall_entry, ARRAY_SIZE(s_syscall_entry), sizeof(s_syscall_entry[0]),
+          s_on_cmp_syscall_entry);
+}
+
 /**
  * @brief Get entry of syscall.
  * @param[in] id System call ID.
  * @return Entry.
  */
-const syscall_entry_t* s_nt_syscall_entry(int id)
+static const syscall_entry_t* s_nt_syscall_entry(int id)
 {
-    size_t i;
-    for (i = 0; i < ARRAY_SIZE(s_syscall_entry); i++)
-    {
-        if (s_syscall_entry[i].id == id)
-        {
-            return &s_syscall_entry[i];
-        }
-    }
-
-    return NULL;
+    syscall_entry_t tmp = { id, NULL, NULL };
+    return bsearch(&tmp, s_syscall_entry, ARRAY_SIZE(s_syscall_entry), sizeof(s_syscall_entry[0]),
+                   s_on_cmp_syscall_entry);
 }
 
 int nt_trace_dump(const nt_syscall_info_t* si, int op, char* buff, size_t size)
 {
+    /* Sort syscall table to accelerate search. */
+    static pthread_once_t s_once_token = PTHREAD_ONCE_INIT;
+    pthread_once(&s_once_token, s_trace_resort_syscall_table);
+
     int         ret;
     nt_strcat_t sc = NT_STRCAT_INIT(buff, size);
 
