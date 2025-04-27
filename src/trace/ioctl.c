@@ -1,4 +1,5 @@
 #include <sys/ioctl.h>
+#include <net/if.h>
 #include "utils/defs.h"
 #include "utils/syscall.h"
 #include "__init__.h"
@@ -28,9 +29,22 @@ static void s_ioctl_decode_ret(nt_strcat_t* sc, const nt_syscall_info_t* si)
     nt_strcat_ret(sc, si->leave.exit.rval, si->leave.exit.is_error);
 }
 
+static void s_ioctl_decode_ifreq(nt_strcat_t* sc, const nt_syscall_info_t* si)
+{
+    struct ifreq req;
+    if (si->enter.entry.args[2] == 0)
+    {
+        nt_strcat(sc, "NULL");
+        return;
+    }
+
+    nt_syscall_getdata(si->pid, si->enter.entry.args[2], &req, sizeof(req));
+    nt_strcat(sc, "%d", req.ifr_ifindex);
+}
+
 static const ioctl_request_t s_ioctl_requests[] = {
     /* socket */
-    { SIOCGIFINDEX,       "SIOCGIFINDEX",       NULL,                 NULL               },
+    { SIOCGIFINDEX,       "SIOCGIFINDEX",       s_ioctl_decode_ifreq, s_ioctl_decode_ret },
     /* tty */
     { TCGETS,             "TCGETS",             NULL,                 s_ioctl_decode_ret },
     { TCSETS,             "TCSETS",             NULL,                 NULL               },
