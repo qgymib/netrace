@@ -17,11 +17,16 @@ static void s_decode_recvfrom_arg1(nt_strcat_t* sc, const nt_syscall_info_t* si)
         nt_strcat(sc, "NULL, ");
         return;
     }
+    if (si->leave.exit.rval <= 0)
+    {
+        nt_strcat(sc, "\"\", ");
+        return;
+    }
 
-    size_t buff_sz = NT_MIN(sizeof(buff), si->enter.entry.args[2]);
+    size_t buff_sz = NT_MIN(sizeof(buff), (size_t)si->leave.exit.rval);
     nt_syscall_getdata(si->pid, si->enter.entry.args[1], buff, buff_sz);
     nt_strcat_dump(sc, buff, buff_sz);
-    if (buff_sz < si->enter.entry.args[2])
+    if (buff_sz < (size_t)si->leave.exit.rval)
     {
         nt_strcat(sc, "...");
     }

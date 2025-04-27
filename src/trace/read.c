@@ -9,6 +9,11 @@ static void s_decode_read_arg0(nt_strcat_t* sc, const nt_syscall_info_t* si)
 
 static void s_decode_read_arg1(nt_strcat_t* sc, const nt_syscall_info_t* si)
 {
+    if (si->enter.entry.args[1] == 0)
+    {
+        nt_strcat(sc, "NULL, ");
+        return;
+    }
     if (si->leave.exit.rval <= 0)
     {
         nt_strcat(sc, "\"\", ");
