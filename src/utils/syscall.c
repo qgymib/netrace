@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <sys/user.h>
 #include <sys/ptrace.h>
+#include <sys/un.h>
 #include "utils/defs.h"
 #include "utils/log.h"
 #include "syscall.h"
@@ -184,26 +185,35 @@ void nt_syscall_setdata(pid_t pid, uintptr_t addr, const void* src, size_t len)
 
 int nt_syscall_get_sockaddr(pid_t pid, uintptr_t addr, struct sockaddr_storage* data, size_t size)
 {
-    const size_t sockv4_len = sizeof(struct sockaddr_in);
-    const size_t sockv6_len = sizeof(struct sockaddr_in6);
+    /*
+     * Try get address type.
+     * Note the type is `unsigned short`, but syscall must align to `word`, so we just get `word`.
+     */
+    nt_syscall_getdata(pid, addr, data, sizeof(syscall_word_t));
 
-    if (size < sockv4_len)
+    size_t data_len = 0;
+    switch (data->ss_family)
+    {
+    case AF_INET:
+        data_len = sizeof(struct sockaddr_in);
+        break;
+    case AF_INET6:
+        data_len = sizeof(struct sockaddr_in6);
+        break;
+    case AF_UNIX:
+        data_len = sizeof(struct sockaddr_un);
+        break;
+    default:
+        return NT_ERR(ENOTSUP);
+    }
+    if (size < data_len)
     {
         return NT_ERR(EINVAL);
     }
 
-    /* Try get IPv4 address. */
-    nt_syscall_getdata(pid, addr, data, sockv4_len);
-
-    if (data->ss_family == AF_INET6)
-    {
-        if (size < sockv6_len)
-        {
-            return NT_ERR(EINVAL);
-        }
-
-        nt_syscall_getdata(pid, addr, data, sockv6_len);
-    }
+    size_t left_sz = data_len - sizeof(syscall_word_t);
+    void* dst = (char*)data + sizeof(syscall_word_t);
+    nt_syscall_getdata(pid, addr + sizeof(syscall_word_t), dst, left_sz);
 
     return 0;
 }

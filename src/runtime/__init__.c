@@ -277,12 +277,13 @@ static void s_trace_syscall_connect_enter(prog_node_t* prog)
     }
 
     /* Parser peer information. */
-    char peer_ip[64];
+    char peer_ip[128];
     int  peer_port = 0;
     nt_ip_name((struct sockaddr*)&sock->peer_addr, peer_ip, sizeof(peer_ip), &peer_port);
     const char* sock_type_name = nt_socktype_name(sock->type);
 
-    if (sock->type == SOCK_DGRAM && peer_port == 53 && G->dns != NULL)
+    if (NT_IS_IP_FAMILY(&sock->peer_addr) && sock->type == SOCK_DGRAM && peer_port == 53 &&
+        G->dns != NULL)
     {
         LOG_I("[PID=%d] Proxy dns://%s:%d", prog->si.pid, peer_ip, peer_port);
         nt_dns_proxy_local_addr(G->dns, &sock->proxy_addr);
@@ -293,7 +294,14 @@ static void s_trace_syscall_connect_enter(prog_node_t* prog)
     if ((sock->domain != AF_INET && sock->domain != AF_INET6) ||
         nt_ipfilter_check(G->ipfilter, sock->type, (struct sockaddr*)&sock->peer_addr))
     {
-        LOG_I("[PID=%d] Bypass %s://%s:%d", prog->si.pid, sock_type_name, peer_ip, peer_port);
+        if (NT_IS_IP_FAMILY(&sock->peer_addr))
+        {
+            LOG_I("[PID=%d] Bypass %s://%s:%d", prog->si.pid, sock_type_name, peer_ip, peer_port);
+        }
+        else
+        {
+            LOG_I("[PID=%d] Bypass %s://%s", prog->si.pid, sock_type_name, peer_ip);
+        }
         return;
     }
     LOG_I("[PID=%d] Redirect %s://%s:%d", prog->si.pid, sock_type_name, peer_ip, peer_port);

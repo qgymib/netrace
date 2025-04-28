@@ -2,8 +2,10 @@
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <stdio.h>
 #include <arpa/inet.h>
 #include <sys/ioctl.h>
+#include <sys/un.h>
 #include "utils/defs.h"
 #include "utils/socket.h"
 
@@ -54,7 +56,7 @@ int nt_ip_name(const struct sockaddr* addr, char* ip, size_t len, int* port)
             return inet_ntop(AF_INET, &p_addr->sin_addr, ip, len) != NULL ? 0 : NT_ERR(ENOSPC);
         }
     }
-    else
+    else if (addr->sa_family == AF_INET6)
     {
         const struct sockaddr_in6* p_addr = (struct sockaddr_in6*)addr;
         if (port != NULL)
@@ -65,6 +67,22 @@ int nt_ip_name(const struct sockaddr* addr, char* ip, size_t len, int* port)
         {
             return inet_ntop(AF_INET6, &p_addr->sin6_addr, ip, len) != NULL ? 0 : NT_ERR(ENOSPC);
         }
+    }
+    else if (addr->sa_family == AF_UNIX)
+    {
+        const struct sockaddr_un* p_addr = (struct sockaddr_un*)addr;
+        if (port != NULL)
+        {
+            *port = 0;
+        }
+        if (ip != NULL)
+        {
+            snprintf(ip, len, "%s", p_addr->sun_path);
+        }
+    }
+    else
+    {
+        return NT_ERR(ENOTSUP);
     }
 
     return 0;

@@ -341,3 +341,41 @@ int nt_str_sysdump(nt_strcat_t* sc, pid_t pid, uintptr_t addr, size_t size)
 
     return ret;
 }
+
+int nt_str_dump_sockaddr(nt_strcat_t* sc, const struct sockaddr* addr)
+{
+    int  ret = 0;
+    char ip[128];
+    int  port = 0;
+    if (nt_ip_name(addr, ip, sizeof(ip), &port) != 0)
+    {
+        return nt_strcat(sc, "EINVAL");
+    }
+
+    ret += nt_strcat(sc, "{domain=%s", nt_socket_domain_name(addr->sa_family));
+    if (addr->sa_family == AF_INET || addr->sa_family == AF_INET6)
+    {
+        ret += nt_strcat(sc, ",addr=%s, port=%d", ip, port);
+    }
+    else if (addr->sa_family == AF_UNIX)
+    {
+        ret += nt_strcat(sc, ",path=");
+        ret += nt_strcat_dump(sc, ip, strlen(ip));
+    }
+    ret += nt_strcat(sc, "}");
+
+    return ret;
+}
+
+int nt_str_sysdump_sockaddr(nt_strcat_t* sc, pid_t pid, uintptr_t addr, size_t len)
+{
+    int                     ret;
+    struct sockaddr_storage sockaddr;
+
+    if ((ret = nt_syscall_get_sockaddr(pid, addr, &sockaddr, len)) != 0)
+    {
+        return ret;
+    }
+
+    return nt_str_dump_sockaddr(sc, (struct sockaddr*)&sockaddr);
+}

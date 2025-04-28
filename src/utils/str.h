@@ -94,8 +94,18 @@ const char* nt_strerrorname(int code);
 
 int nt_str_sysdump_iovec(nt_strcat_t* sc, pid_t pid, uintptr_t iov, int iovcnt, size_t maxsize);
 int nt_str_dump_msghdr(const struct msghdr* msg, pid_t pid, nt_strcat_t* sc);
-
 int nt_str_sysdump(nt_strcat_t* sc, pid_t pid, uintptr_t addr, size_t size);
+
+int nt_str_dump_sockaddr(nt_strcat_t* sc, const struct sockaddr* addr);
+
+/**
+ *
+ * @param sc
+ * @param pid
+ * @param[in] addr Type of `struct sockaddr`.
+ * @return
+ */
+int nt_str_sysdump_sockaddr(nt_strcat_t* sc, pid_t pid, uintptr_t addr, size_t len);
 
 #ifdef __cplusplus
 }
