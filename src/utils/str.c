@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <inttypes.h>
+#include <pthread.h>
+#include <stdlib.h>
 #include "utils/defs.h"
 #include "utils/syscall.h"
 #include "trace/__init__.h"
@@ -17,37 +19,133 @@ typedef struct errno_name
 } errno_name_t;
 
 static errno_name_t s_errno_name[] = {
+    { E2BIG,           "E2BIG"           },
     { EACCES,          "EACCES"          },
     { EADDRINUSE,      "EADDRINUSE"      },
     { EADDRNOTAVAIL,   "EADDRNOTAVAIL"   },
     { EAFNOSUPPORT,    "EAFNOSUPPORT"    },
     { EAGAIN,          "EAGAIN"          },
     { EALREADY,        "EALREADY"        },
+    { EBADE,           "EBADE"           },
     { EBADF,           "EBADF"           },
+    { EBADFD,          "EBADFD"          },
+    { EBADMSG,         "EBADMSG"         },
+    { EBADR,           "EBADR"           },
+    { EBADRQC,         "EBADRQC"         },
+    { EBADSLT,         "EBADSLT"         },
     { EBUSY,           "EBUSY"           },
+    { ECANCELED,       "ECANCELED"       },
+    { ECHILD,          "ECHILD"          },
+    { ECHRNG,          "ECHRNG"          },
+    { ECOMM,           "ECOMM"           },
+    { ECONNABORTED,    "ECONNABORTED"    },
     { ECONNREFUSED,    "ECONNREFUSED"    },
+    { ECONNRESET,      "ECONNRESET"      },
+    { EDEADLK,         "EDEADLK"         },
+    { EDEADLOCK,       "EDEADLOCK"       },
+    { EDESTADDRREQ,    "EDESTADDRREQ"    },
+    { EDOM,            "EDOM"            },
     { EDQUOT,          "EDQUOT"          },
+    { EEXIST,          "EEXIST"          },
     { EFAULT,          "EFAULT"          },
+    { EFBIG,           "EFBIG"           },
+    { EHOSTDOWN,       "EHOSTDOWN"       },
+    { EHOSTUNREACH,    "EHOSTUNREACH"    },
+    { EHWPOISON,       "EHWPOISON"       },
+    { EIDRM,           "EIDRM"           },
+    { EILSEQ,          "EILSEQ"          },
     { EINPROGRESS,     "EINPROGRESS"     },
     { EINTR,           "EINTR"           },
     { EINVAL,          "EINVAL"          },
     { EIO,             "EIO"             },
     { EISCONN,         "EISCONN"         },
+    { EISDIR,          "EISDIR"          },
+    { EISNAM,          "EISNAM"          },
+    { EKEYEXPIRED,     "EKEYEXPIRED"     },
+    { EKEYREJECTED,    "EKEYREJECTED"    },
+    { EKEYREVOKED,     "EKEYREVOKED"     },
+    { EL2HLT,          "EL2HLT"          },
+    { EL2NSYNC,        "EL2NSYNC"        },
+    { EL3HLT,          "EL3HLT"          },
+    { EL3RST,          "EL3RST"          },
+    { ELIBACC,         "ELIBACC"         },
+    { ELIBBAD,         "ELIBBAD"         },
+    { ELIBMAX,         "ELIBMAX"         },
+    { ELIBSCN,         "ELIBSCN"         },
+    { ELIBEXEC,        "ELIBEXEC"        },
+    { ELNRNG,          "ELNRNG"          },
+    { ELOOP,           "ELOOP"           },
+    { EMEDIUMTYPE,     "EMEDIUMTYPE"     },
     { EMFILE,          "EMFILE"          },
+    { EMLINK,          "EMLINK"          },
+    { EMSGSIZE,        "EMSGSIZE"        },
+    { EMULTIHOP,       "EMULTIHOP"       },
+    { ENAMETOOLONG,    "ENAMETOOLONG"    },
+    { ENETDOWN,        "ENETDOWN"        },
+    { ENETRESET,       "ENETRESET"       },
     { ENETUNREACH,     "ENETUNREACH"     },
     { ENFILE,          "ENFILE"          },
+    { ENOANO,          "ENOANO"          },
     { ENOBUFS,         "ENOBUFS"         },
+    { ENODATA,         "ENODATA"         },
+    { ENODEV,          "ENODEV"          },
     { ENOENT,          "ENOENT"          },
+    { ENOEXEC,         "ENOEXEC"         },
+    { ENOKEY,          "ENOKEY"          },
+    { ENOLCK,          "ENOLCK"          },
+    { ENOLINK,         "ENOLINK"         },
+    { ENOMEDIUM,       "ENOMEDIUM"       },
     { ENOMEM,          "ENOMEM"          },
+    { ENOMSG,          "ENOMSG"          },
+    { ENONET,          "ENONET"          },
+    { ENOPKG,          "ENOPKG"          },
+    { ENOPROTOOPT,     "ENOPROTOOPT"     },
     { ENOSPC,          "ENOSPC"          },
+    { ENOSR,           "ENOSR"           },
+    { ENOSTR,          "ENOSTR"          },
+    { ENOSYS,          "ENOSYS"          },
+    { ENOTBLK,         "ENOTBLK"         },
     { ENOTCONN,        "ENOTCONN"        },
+    { ENOTDIR,         "ENOTDIR"         },
+    { ENOTEMPTY,       "ENOTEMPTY"       },
+    { ENOTRECOVERABLE, "ENOTRECOVERABLE" },
     { ENOTSOCK,        "ENOTSOCK"        },
+    { ENOTSUP,         "ENOTSUP"         },
     { ENOTTY,          "ENOTTY"          },
+    { ENOTUNIQ,        "ENOTUNIQ"        },
+    { ENXIO,           "ENXIO"           },
+    { EOPNOTSUPP,      "EOPNOTSUPP"      },
+    { EOVERFLOW,       "EOVERFLOW"       },
+    { EOWNERDEAD,      "EOWNERDEAD"      },
     { EPERM,           "EPERM"           },
     { EPROTONOSUPPORT, "EPROTONOSUPPORT" },
+    { EPIPE,           "EPIPE"           },
+    { EPROTO,          "EPROTO"          },
+    { EPROTONOSUPPORT, "EPROTONOSUPPORT" },
     { EPROTOTYPE,      "EPROTOTYPE"      },
+    { ERANGE,          "ERANGE"          },
+    { EREMCHG,         "EREMCHG"         },
+    { EREMOTE,         "EREMOTE"         },
+    { EREMOTEIO,       "EREMOTEIO"       },
+    { ERESTART,        "ERESTART"        },
+    { ERFKILL,         "ERFKILL"         },
+    { EROFS,           "EROFS"           },
+    { ESHUTDOWN,       "ESHUTDOWN"       },
+    { ESPIPE,          "ESPIPE"          },
+    { ESOCKTNOSUPPORT, "ESOCKTNOSUPPORT" },
     { ESRCH,           "ESRCH"           },
+    { ESTALE,          "ESTALE"          },
+    { ESTRPIPE,        "ESTRPIPE"        },
+    { ETIME,           "ETIME"           },
     { ETIMEDOUT,       "ETIMEDOUT"       },
+    { ETOOMANYREFS,    "ETOOMANYREFS"    },
+    { ETXTBSY,         "ETXTBSY"         },
+    { EUCLEAN,         "EUCLEAN"         },
+    { EUNATCH,         "EUNATCH"         },
+    { EUSERS,          "EUSERS"          },
+    { EWOULDBLOCK,     "EWOULDBLOCK"     },
+    { EXDEV,           "EXDEV"           },
+    { EXFULL,          "EXFULL"          },
 };
 
 static const char* s_escape(int c)
@@ -72,6 +170,22 @@ static const char* s_escape(int c)
         break;
     }
     return NULL;
+}
+
+static int s_on_cmp_errno_name(const void* a, const void* b)
+{
+    const errno_name_t* n1 = (errno_name_t*)a;
+    const errno_name_t* n2 = (errno_name_t*)b;
+    if (n1->code == n2->code)
+    {
+        return 0;
+    }
+    return n1->code < n2->code ? -1 : 1;
+}
+
+static void s_strerrorname_resort_syscall_table()
+{
+    qsort(s_errno_name, ARRAY_SIZE(s_errno_name), sizeof(s_errno_name[0]), s_on_cmp_errno_name);
 }
 
 const char* nt_strrstr(const char* haystack, const char* needle)
@@ -135,15 +249,13 @@ const char* nt_strnrstr(const char* haystack, size_t len, const char* needle)
 
 const char* nt_strerrorname(int code)
 {
-    size_t i;
-    for (i = 0; i < ARRAY_SIZE(s_errno_name); i++)
-    {
-        if (s_errno_name[i].code == code)
-        {
-            return s_errno_name[i].name;
-        }
-    }
-    return NULL;
+    static pthread_once_t s_once_token = PTHREAD_ONCE_INIT;
+    pthread_once(&s_once_token, s_strerrorname_resort_syscall_table);
+
+    errno_name_t  tmp = { code, NULL };
+    errno_name_t* r = bsearch(&tmp, s_errno_name, ARRAY_SIZE(s_errno_name), sizeof(s_errno_name[0]),
+                              s_on_cmp_errno_name);
+    return r != NULL ? r->name : NULL;
 }
 
 int nt_strcat(nt_strcat_t* s, const char* fmt, ...)
@@ -345,7 +457,7 @@ int nt_str_sysdump(nt_strcat_t* sc, pid_t pid, uintptr_t addr, size_t size)
 
 int nt_str_sysdump_str(nt_strcat_t* sc, pid_t pid, uintptr_t addr)
 {
-    int ret;
+    int  ret;
     char buff[NT_MAX_DUMP_SIZE];
     if ((ret = nt_syscall_get_string(pid, addr, buff, sizeof(buff))) < 0)
     {
