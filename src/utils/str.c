@@ -7,6 +7,7 @@
 #include "utils/defs.h"
 #include "utils/syscall.h"
 #include "trace/__init__.h"
+#include "config.h"
 #include "str.h"
 
 typedef struct errno_name
@@ -234,7 +235,7 @@ static int s_str_dump_msghdr_msgname(const struct msghdr* msg, pid_t pid, nt_str
 static int s_str_dump_msghdr_msgcontrol(const struct msghdr* msg, pid_t pid, nt_strcat_t* sc)
 {
     int           ret = 0;
-    unsigned char buff[32];
+    unsigned char buff[NT_MAX_DUMP_SIZE];
     if (msg->msg_control == NULL)
     {
         return nt_strcat(sc, "NULL");
@@ -324,7 +325,7 @@ int nt_str_dump_msghdr(const struct msghdr* msg, pid_t pid, nt_strcat_t* sc)
 int nt_str_sysdump(nt_strcat_t* sc, pid_t pid, uintptr_t addr, size_t size)
 {
     int           ret = 0;
-    unsigned char buff[32];
+    unsigned char buff[NT_MAX_DUMP_SIZE];
     size_t        read_sz = NT_MIN(sizeof(buff), size);
 
     if (addr == 0)
@@ -335,6 +336,25 @@ int nt_str_sysdump(nt_strcat_t* sc, pid_t pid, uintptr_t addr, size_t size)
 
     ret += nt_strcat_dump(sc, buff, read_sz);
     if (read_sz < size)
+    {
+        ret += nt_strcat(sc, "...");
+    }
+
+    return ret;
+}
+
+int nt_str_sysdump_str(nt_strcat_t* sc, pid_t pid, uintptr_t addr)
+{
+    int ret;
+    char buff[NT_MAX_DUMP_SIZE];
+    if ((ret = nt_syscall_get_string(pid, addr, buff, sizeof(buff))) < 0)
+    {
+        return ret;
+    }
+
+    size_t dump_sz = ((size_t)ret >= sizeof(buff)) ? (sizeof(buff) - 1) : (size_t)ret;
+    ret = nt_strcat_dump(sc, buff, dump_sz);
+    if (dump_sz == (sizeof(buff) - 1))
     {
         ret += nt_strcat(sc, "...");
     }

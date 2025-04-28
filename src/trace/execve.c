@@ -6,26 +6,13 @@
 
 static void s_decode_execve_arg0(nt_strcat_t* sc, const nt_syscall_info_t* si)
 {
-    char buff[32];
     if (si->enter.entry.args[0] == 0)
     {
         nt_strcat(sc, "NULL");
         return;
     }
 
-    int ret = nt_syscall_get_string(si->pid, si->enter.entry.args[0], buff, sizeof(buff));
-    if (ret < 0)
-    {
-        nt_strcat(sc, "%s", nt_strerrorname(NT_RAWERR(ret)));
-        return;
-    }
-
-    size_t dump_sz = ((size_t)ret >= sizeof(buff)) ? (sizeof(buff) - 1) : (size_t)ret;
-    nt_strcat_dump(sc, buff, dump_sz);
-    if ((size_t)ret >= sizeof(buff))
-    {
-        nt_strcat(sc, "...");
-    }
+    nt_str_sysdump_str(sc, si->pid, si->enter.entry.args[0]);
 }
 
 int nt_syscall_decode_execve(const nt_syscall_info_t* si, int op, char* buff, size_t size)

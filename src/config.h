@@ -35,4 +35,8 @@
 #define NT_PROGRAM_NAMESPACE "io.github.qgymib.netrace"
 #endif
 
+#ifndef NT_MAX_DUMP_SIZE
+#define NT_MAX_DUMP_SIZE 64
+#endif
+
 #endif

@@ -48,6 +48,7 @@ add_library(lib${PROJECT_NAME} STATIC
     "src/trace/getuid.c"
     "src/trace/ioctl.c"
     "src/trace/listen.c"
+    "src/trace/openat.c"
     "src/trace/pipe2.c"
     "src/trace/pread64.c"
     "src/trace/preadv.c"

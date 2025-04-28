@@ -64,6 +64,7 @@ int nt_syscall_decode_getsockname(const nt_syscall_info_t* si, int op, char* buf
 int nt_syscall_decode_getuid(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_ioctl(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_listen(const nt_syscall_info_t* si, int op, char* buff, size_t size);
+int nt_syscall_decode_openat(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_pipe2(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_pread64(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_preadv(const nt_syscall_info_t* si, int op, char* buff, size_t size);

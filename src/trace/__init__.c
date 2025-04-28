@@ -299,7 +299,7 @@ static syscall_entry_t s_syscall_entry[] = {
 #endif
     { SYS_open_by_handle_at,       "open_by_handle_at",       NULL                          },
     { SYS_open_tree,               "open_tree",               NULL                          },
-    { SYS_openat,                  "openat",                  NULL                          },
+    { SYS_openat,                  "openat",                  nt_syscall_decode_openat      },
     { SYS_openat2,                 "openat2",                 NULL                          },
 #if defined(SYS_pause)
     { SYS_pause,                   "pause",                   NULL                          },
