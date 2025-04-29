@@ -25,8 +25,16 @@ static void s_decode_socket_arg1(nt_strcat_t* sc, const nt_syscall_info_t* si)
 
 static void s_decode_socket_arg2(nt_strcat_t* sc, const nt_syscall_info_t* si)
 {
-    int protocol = si->enter.entry.args[2];
-    nt_strcat(sc, "%d", protocol);
+    int         protocol = si->enter.entry.args[2];
+    const char* name = nt_socket_protocol_name(protocol);
+    if (name != NULL)
+    {
+        nt_strcat(sc, "%s", name);
+    }
+    else
+    {
+        nt_strcat(sc, "%d", protocol);
+    }
 }
 
 int nt_syscall_decode_socket(const nt_syscall_info_t* si, int op, char* buff, size_t size)

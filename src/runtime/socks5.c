@@ -1328,7 +1328,7 @@ static int s_socks5_channel_create(struct nt_proxy* thiz, int type, const struct
     }
     pthread_mutex_unlock(&socks5->actq_mutex);
 
-    LOG_D("[CHID=%d] Create %s channel.", ch->chid, nt_socktype_name(type));
+    LOG_D("[CHID=%d] Create %s channel.", ch->chid, nt_socket_type_name(type));
     s_socks5_weakup(socks5);
     return ret;
 }

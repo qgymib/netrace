@@ -280,7 +280,7 @@ static void s_trace_syscall_connect_enter(prog_node_t* prog)
     char peer_ip[128];
     int  peer_port = 0;
     nt_ip_name((struct sockaddr*)&sock->peer_addr, peer_ip, sizeof(peer_ip), &peer_port);
-    const char* sock_type_name = nt_socktype_name(sock->type);
+    const char* sock_type_name = nt_socket_type_name(sock->type);
 
     if (NT_IS_IP_FAMILY(&sock->peer_addr) && sock->type == SOCK_DGRAM && peer_port == 53 &&
         G->dns != NULL)

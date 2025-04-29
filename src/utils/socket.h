@@ -60,13 +60,6 @@ ssize_t nt_write(int fd, const void* buf, size_t size);
 void nt_sockaddr_copy(struct sockaddr* dst, const struct sockaddr* src);
 
 /**
- * @brief Get socket type name.
- * @param[in] type
- * @return Name string.
- */
-const char* nt_socktype_name(int type);
-
-/**
  * @brief Like socket(), but set nonblock flag.
  */
 int nt_socket(int domain, int type, int nonblock);
@@ -128,6 +121,13 @@ const char* nt_socket_domain_name(int domain);
  * @return String.
  */
 const char* nt_socket_type_name(int type);
+
+/**
+ * @brief Retrieve the protocol name corresponding to a given protocol number.
+ * @param[in] protocol The protocol number (e.g., IPPROTO_TCP, IPPROTO_UDP).
+ * @return A pointer to a constant string containing the protocol name if found, or NULL otherwise.
+ */
+const char* nt_socket_protocol_name(int protocol);
 
 #ifdef __cplusplus
 }
