@@ -122,7 +122,9 @@ static nt_type_name_t s_socket_protocol_name[] = {
     { IPPROTO_IP,       "IPPROTO_IP"       },
     { IPPROTO_IPV6,     "IPPROTO_IPV6"     },
     { IPPROTO_IPIP,     "IPPROTO_IPIP"     },
+#if defined(IPPROTO_L2TP)
     { IPPROTO_L2TP,     "IPPROTO_L2TP"     },
+#endif
     { IPPROTO_MPLS,     "IPPROTO_MPLS"     },
     { IPPROTO_MPTCP,    "IPPROTO_MPTCP"    },
     { IPPROTO_MTP,      "IPPROTO_MTP"      },
