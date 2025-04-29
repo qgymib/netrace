@@ -172,7 +172,7 @@ static syscall_entry_t s_syscall_entry[] = {
     { SYS_get_thread_area,         "get_thread_area",         NULL                          },
 #endif
     { SYS_getcpu,                  "getcpu",                  NULL                          },
-    { SYS_getcwd,                  "getcwd",                  NULL                          },
+    { SYS_getcwd,                  "getcwd",                  nt_syscall_decode_getcwd      },
 #if defined(SYS_getdents)
     { SYS_getdents,                "getdents",                NULL                          },
 #endif
