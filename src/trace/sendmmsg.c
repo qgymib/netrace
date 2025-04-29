@@ -28,7 +28,7 @@ static void s_decode_sendmmsg_arg1(nt_strcat_t* sc, const nt_syscall_info_t* si)
         struct msghdr*  hdr = &msg->msg_hdr;
         nt_strcat(sc, "msg_hdr=");
         nt_str_sysdump_msghdr(sc, si->pid, hdr);
-        nt_strcat(sc, "msg_len=%u", msg->msg_len);
+        nt_strcat(sc, ",msg_len=%u", msg->msg_len);
         nt_strcat(sc, "}%s", i == hdr_len - 1 ? "" : ",");
     }
     if (hdr_len < vlen)
@@ -46,33 +46,17 @@ static void s_decode_sendmmsg_arg2(nt_strcat_t* sc, const nt_syscall_info_t* si)
 
 static void s_decode_sendmmsg_arg3(nt_strcat_t* sc, const nt_syscall_info_t* si)
 {
-#define CHECK_CAT_FLAG(name)                                                                       \
-    do                                                                                             \
-    {                                                                                              \
-        if (flags & name)                                                                          \
-        {                                                                                          \
-            nt_strcat(sc, "%s%s", flag_cnt++ == 0 ? "" : "|", #name);                              \
-        }                                                                                          \
-    } while (0)
-
-    int    flags = si->enter.entry.args[3];
-    size_t flag_cnt = 0;
-
-    CHECK_CAT_FLAG(MSG_CONFIRM);
-    CHECK_CAT_FLAG(MSG_DONTROUTE);
-    CHECK_CAT_FLAG(MSG_DONTWAIT);
-    CHECK_CAT_FLAG(MSG_EOR);
-    CHECK_CAT_FLAG(MSG_MORE);
-    CHECK_CAT_FLAG(MSG_NOSIGNAL);
-    CHECK_CAT_FLAG(MSG_OOB);
-    CHECK_CAT_FLAG(MSG_FASTOPEN);
-
-    if (flag_cnt == 0)
-    {
-        nt_strcat(sc, "0");
-    }
-
-#undef CHECK_CAT_FLAG
+    int             flags = si->enter.entry.args[3];
+    nt_bitdecoder_t bd = NT_BITDECODER_INIT(flags, sc);
+    NT_BITDECODER_DECODE(&bd, MSG_CONFIRM);
+    NT_BITDECODER_DECODE(&bd, MSG_DONTROUTE);
+    NT_BITDECODER_DECODE(&bd, MSG_DONTWAIT);
+    NT_BITDECODER_DECODE(&bd, MSG_EOR);
+    NT_BITDECODER_DECODE(&bd, MSG_MORE);
+    NT_BITDECODER_DECODE(&bd, MSG_NOSIGNAL);
+    NT_BITDECODER_DECODE(&bd, MSG_OOB);
+    NT_BITDECODER_DECODE(&bd, MSG_FASTOPEN);
+    NT_BITDECODER_FINISH(&bd);
 }
 
 int nt_syscall_decode_sendmmsg(const nt_syscall_info_t* si, int op, char* buff, size_t size)
