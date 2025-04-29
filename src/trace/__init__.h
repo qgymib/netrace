@@ -52,6 +52,7 @@ int nt_trace_dump(const nt_syscall_info_t* si, int op, char* buff, size_t size);
  */
 int nt_syscall_decode_accept(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_accept4(const nt_syscall_info_t* si, int op, char* buff, size_t size);
+int nt_syscall_decode_access(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_bind(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_clone(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_close(const nt_syscall_info_t* si, int op, char* buff, size_t size);

@@ -37,7 +37,7 @@ static syscall_entry_t s_syscall_entry[] = {
     { SYS_accept,                  "accept",                  nt_syscall_decode_accept      },
     { SYS_accept4,                 "accept4",                 nt_syscall_decode_accept4     },
 #if defined(SYS_access)
-    { SYS_access,                  "access",                  NULL                          },
+    { SYS_access,                  "access",                  nt_syscall_decode_access      },
 #endif
     { SYS_acct,                    "acct",                    NULL                          },
     { SYS_add_key,                 "add_key",                 NULL                          },
