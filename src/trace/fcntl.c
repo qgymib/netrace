@@ -103,17 +103,82 @@ static void s_decode_fcntl_getfl_r(nt_strcat_t* sc, const nt_syscall_info_t* si)
 }
 
 static const fcntl_cmd_t s_fcntl_cmds[] = {
-    { F_DUPFD,         "F_DUPFD",         s_decode_fcntl_int,     NULL                   },
-    { F_DUPFD_CLOEXEC, "F_DUPFD_CLOEXEC", s_decode_fcntl_int,     NULL                   },
-    { F_GETFD,         "F_GETFD",         NULL,                   s_decode_fcntl_getfd_r },
-    { F_SETFD,         "F_SETFD",         s_decode_fcntl_setfd_p, NULL                   },
-    { F_GETFL,         "F_GETFL",         NULL,                   s_decode_fcntl_getfl_r },
-    { F_SETFL,         "F_SETFL",         s_decode_fcntl_int,     NULL                   },
-    { F_SETLK,         "F_SETLK",         s_decode_fcntl_flock,   NULL                   },
-    { F_SETLKW,        "F_SETLKW",        s_decode_fcntl_flock,   NULL                   },
-    { F_GETLK,         "F_GETLK",         s_decode_fcntl_flock,   NULL                   },
-    { F_GETOWN,        "F_GETOWN",        NULL,                   NULL                   },
-    { F_SETOWN,        "F_SETOWN",        s_decode_fcntl_int,     NULL                   },
+    /* Duplicating a file descriptor */
+    { F_DUPFD,            "F_DUPFD",            s_decode_fcntl_int,     NULL                   },
+    { F_DUPFD_CLOEXEC,    "F_DUPFD_CLOEXEC",    s_decode_fcntl_int,     NULL                   },
+    /* File descriptor flags */
+    { F_GETFD,            "F_GETFD",            NULL,                   s_decode_fcntl_getfd_r },
+    { F_SETFD,            "F_SETFD",            s_decode_fcntl_setfd_p, NULL                   },
+    /* File status flags */
+    { F_GETFL,            "F_GETFL",            NULL,                   s_decode_fcntl_getfl_r },
+    { F_SETFL,            "F_SETFL",            s_decode_fcntl_int,     NULL                   },
+    /* Advisory record locking */
+    { F_SETLK,            "F_SETLK",            s_decode_fcntl_flock,   NULL                   },
+    { F_SETLKW,           "F_SETLKW",           s_decode_fcntl_flock,   NULL                   },
+    { F_GETLK,            "F_GETLK",            s_decode_fcntl_flock,   NULL                   },
+    /* Open file description locks (non-POSIX) */
+#if defined(F_OFD_SETLK)
+    { F_OFD_SETLK,        "F_OFD_SETLK",        NULL,                   NULL                   },
+#endif
+#if defined(F_OFD_SETLKW)
+    { F_OFD_SETLKW,       "F_OFD_SETLKW",       NULL,                   NULL                   },
+#endif
+#if defined(F_OFD_GETLK)
+    { F_OFD_GETLK,        "F_OFD_GETLK",        NULL,                   NULL                   },
+#endif
+    /* Managing signals */
+    { F_GETOWN,           "F_GETOWN",           NULL,                   NULL                   },
+    { F_SETOWN,           "F_SETOWN",           s_decode_fcntl_int,     NULL                   },
+#if defined(F_GETOWN_EX)
+    { F_GETOWN_EX,        "F_GETOWN_EX",        NULL,                   NULL                   },
+#endif
+#if defined(F_SETOWN_EX)
+    { F_SETOWN_EX,        "F_SETOWN_EX",        NULL,                   NULL                   },
+#endif
+#if defined(F_GETSIG)
+    { F_GETSIG,           "F_GETSIG",           NULL,                   NULL                   },
+#endif
+#if defined(F_SETSIG)
+    { F_SETSIG,           "F_SETSIG",           NULL,                   NULL                   },
+#endif
+    /* Leases */
+#if defined(F_SETLEASE)
+    { F_SETLEASE,         "F_SETLEASE",         NULL,                   NULL                   },
+#endif
+#if defined(F_GETLEASE)
+    { F_GETLEASE,         "F_GETLEASE",         NULL,                   NULL                   },
+#endif
+    /* File and directory change notification (dnotify) */
+#if defined(F_NOTIFY)
+    { F_NOTIFY,           "F_NOTIFY",           NULL,                   NULL                   },
+#endif
+    /* Changing the capacity of a pipe */
+#if defined(F_SETPIPE_SZ)
+    { F_SETPIPE_SZ,       "F_SETPIPE_SZ",       NULL,                   NULL                   },
+#endif
+#if defined(F_GETPIPE_SZ)
+    { F_GETPIPE_SZ,       "F_GETPIPE_SZ",       NULL,                   NULL                   },
+#endif
+    /* File Sealing */
+#if defined(F_ADD_SEALS)
+    { F_ADD_SEALS,        "F_ADD_SEALS",        NULL,                   NULL                   },
+#endif
+#if defined(F_GET_SEALS)
+    { F_GET_SEALS,        "F_GET_SEALS",        NULL,                   NULL                   },
+#endif
+    /* File read/write hints */
+#if defined(F_GET_RW_HINT)
+    { F_GET_RW_HINT,      "F_GET_RW_HINT",      NULL,                   NULL                   },
+#endif
+#if defined(F_SET_RW_HINT)
+    { F_SET_RW_HINT,      "F_SET_RW_HINT",      NULL,                   NULL                   },
+#endif
+#if defined(F_GET_FILE_RW_HINT)
+    { F_GET_FILE_RW_HINT, "F_GET_FILE_RW_HINT", NULL,                   NULL                   },
+#endif
+#if defined(F_SET_FILE_RW_HINT)
+    { F_SET_FILE_RW_HINT, "F_SET_FILE_RW_HINT", NULL,                   NULL                   },
+#endif
 };
 
 static void s_decode_fcntl_fd(nt_strcat_t* sc, const nt_syscall_info_t* si)
