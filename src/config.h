@@ -15,8 +15,6 @@
 #define NT_DEFAULT_SOCKS5_PORT 1080
 #endif
 
-#define NT_DEFAULT_PROXY "socks5://" NT_DEFAULT_SOCKS5_ADDR ":" STRINGIFY(NT_DEFAULT_SOCKS5_PORT)
-
 /**
  * @brief Default socket buffer size.
  */

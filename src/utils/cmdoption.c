@@ -1,8 +1,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include "utils/defs.h"
-#include "utils/memory.h"
 #include "utils/log.h"
 #include "cmdoption.h"
 #include "config.h"

@@ -291,7 +291,7 @@ static void s_trace_syscall_connect_enter(prog_node_t* prog)
     }
 
     /* Check filter. */
-    if ((sock->domain != AF_INET && sock->domain != AF_INET6) ||
+    if ((G->proxy == NULL) || (sock->domain != AF_INET && sock->domain != AF_INET6) ||
         nt_ipfilter_check(G->ipfilter, sock->type, (struct sockaddr*)&sock->peer_addr))
     {
         if (NT_IS_IP_FAMILY(&sock->peer_addr))
@@ -740,15 +740,17 @@ static void nt_runtime_init(const nt_cmd_opt_t* opt, pid_t pid)
         exit(EXIT_FAILURE);
     }
 
-    const char* proxy = opt->proxy != NULL ? opt->proxy : NT_DEFAULT_PROXY;
-    if (nt_proxy_create(&G->proxy, proxy) != 0)
+    if (opt->proxy != NULL)
     {
-        LOG_E("Create proxy failed.");
-        exit(EXIT_FAILURE);
+        if (nt_proxy_create(&G->proxy, opt->proxy) != 0)
+        {
+            LOG_E("Create proxy failed.");
+            exit(EXIT_FAILURE);
+        }
+        LOG_D("Create proxy to `%s`.", opt->proxy);
     }
-    LOG_D("Create proxy to `%s`.", proxy);
 
-    if (opt->dns != NULL)
+    if (G->proxy != NULL && opt->dns != NULL)
     {
         url_comp_t* url = NULL;
         if ((ret = nt_url_comp_parser(&url, opt->dns)) != 0)
