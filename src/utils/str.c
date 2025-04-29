@@ -304,23 +304,21 @@ int nt_strcat_dump(nt_strcat_t* sc, void* buff, size_t size)
 
 void nt_strcat_ret(nt_strcat_t* sc, int64_t ret, int err)
 {
+    nt_strcat(sc, "%" PRId64, ret);
+
     if (!err)
     {
-        goto APPEND_CODE;
+        return;
     }
 
     int         errcode = -ret;
     const char* s_err = nt_strerrorname(errcode);
     if (s_err == NULL)
     {
-        goto APPEND_CODE;
+        return;
     }
 
-    nt_strcat(sc, "-%s (%s)", s_err, strerror(errcode));
-    return;
-
-APPEND_CODE:
-    nt_strcat(sc, "%" PRId64, ret);
+    nt_strcat(sc, " %s (%s)", s_err, strerror(errcode));
 }
 
 static int s_str_dump_msghdr_msgname(const struct msghdr* msg, pid_t pid, nt_strcat_t* sc)
@@ -484,7 +482,7 @@ int nt_str_dump_sockaddr(nt_strcat_t* sc, const struct sockaddr* addr)
         return nt_strcat(sc, "EINVAL");
     }
 
-    ret += nt_strcat(sc, "{domain=%s", nt_socket_domain_name(addr->sa_family));
+    ret += nt_strcat(sc, "{family=%s", nt_socket_domain_name(addr->sa_family));
     if (addr->sa_family == AF_INET || addr->sa_family == AF_INET6)
     {
         ret += nt_strcat(sc, ",addr=%s, port=%d", ip, port);
