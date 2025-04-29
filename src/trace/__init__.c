@@ -18,8 +18,20 @@ typedef struct syscall_entry
 } syscall_entry_t;
 
 /**
- * @brief System call entry list. In ascii order.
- * Syscall is not portable, so it is necessary to check if it is defined.
+ * @brief Array containing system call entries with their respective identifiers, names, and
+ * optional decode functions.
+ *
+ * This static array serves as a mapping of system call IDs to their corresponding names and decode
+ * handlers, enabling syscalls to be interpreted or emulated depending on the provided decode
+ * function. Compile-time conditions determine the inclusion of some entries based on their
+ * availability on the target platform.
+ *
+ * Each entry consists of:
+ * - System call identifier (`SYS_*` constant),
+ * - Human-readable name of the system call,
+ * - Optional function pointer for decoding the syscall.
+ *
+ * This array is defined in ascii order and will be resort before use.
  */
 static syscall_entry_t s_syscall_entry[] = {
     { SYS_accept,                  "accept",                  nt_syscall_decode_accept      },

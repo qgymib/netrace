@@ -46,6 +46,10 @@ const char* nt_syscall_name(int id);
  */
 int nt_trace_dump(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 
+/**
+ * @brief Syscall decode functions.
+ * @{
+ */
 int nt_syscall_decode_accept(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_accept4(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_bind(const nt_syscall_info_t* si, int op, char* buff, size_t size);
@@ -86,6 +90,9 @@ int nt_syscall_decode_socket(const nt_syscall_info_t* si, int op, char* buff, si
 int nt_syscall_decode_socketpair(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_write(const nt_syscall_info_t* si, int op, char* buff, size_t size);
 int nt_syscall_decode_writev(const nt_syscall_info_t* si, int op, char* buff, size_t size);
+/**
+ * @}
+ */
 
 #ifdef __cplusplus
 }

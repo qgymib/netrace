@@ -11,12 +11,6 @@
 #include "utils/defs.h"
 #include "utils/socket.h"
 
-typedef struct nt_type_name
-{
-    int         type; /* Type ID */
-    const char* name; /* Type name. */
-} nt_type_name_t;
-
 /**
  * @brief Array containing mappings of socket type IDs to their corresponding names.
  *
@@ -36,7 +30,7 @@ typedef struct nt_type_name
  * The array is defined in a fixed order and can be leveraged by functions to perform
  * operations such as mapping, searching, or displaying type information.
  */
-static nt_type_name_t s_socket_type_name[] = {
+static const nt_type_name_t s_socket_type_name[] = {
     { SOCK_STREAM,    "SOCK_STREAM"    },
     { SOCK_DGRAM,     "SOCK_DGRAM"     },
     { SOCK_SEQPACKET, "SOCK_SEQPACKET" },

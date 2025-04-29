@@ -70,4 +70,35 @@
  */
 #define NT_RAWERR(x) NT_ERR(x)
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/**
+ * @brief Structure representing a mapping between a type identifier and its corresponding name.
+ *
+ * The `nt_type_name` structure is used to define an association between a numeric type identifier
+ * and its human-readable name as a string. This structure is primarily intended to facilitate
+ * converting numeric constants, such as those used for socket types or domains, into
+ * descriptive textual representations. Such mappings are often useful for debugging,
+ * user interface displays, or log outputs.
+ *
+ * The structure consists of the following members:
+ * - `type`: An integer representing the numeric identifier for the type (e.g., a socket type or
+ *   domain).
+ * - `name`: A pointer to a constant character string representing the human-readable name
+ *   of the type.
+ *
+ * Instances of this structure are typically organized into arrays, which can then
+ * be used to define mappings for various identifiers.
+ */
+typedef struct nt_type_name
+{
+    int         type; /* Type ID */
+    const char* name; /* Type name. */
+} nt_type_name_t;
+
+#ifdef __cplusplus
+}
+#endif
 #endif
