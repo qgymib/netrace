@@ -41,6 +41,7 @@ add_library(lib${PROJECT_NAME} STATIC
     "src/trace/dup2.c"
     "src/trace/dup3.c"
     "src/trace/execve.c"
+    "src/trace/faccessat.c"
     "src/trace/fcntl.c"
     "src/trace/getpeername.c"
     "src/trace/getpid.c"

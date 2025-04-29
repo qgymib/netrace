@@ -18,8 +18,8 @@ static void s_decode_recvmsg_arg1(nt_strcat_t* sc, const nt_syscall_info_t* si)
 
     struct msghdr msg;
     nt_syscall_getdata(si->pid, si->enter.entry.args[1], &msg, sizeof(msg));
-
-    nt_str_dump_msghdr(&msg, si->pid, sc);
+    nt_str_sysdump_msghdr(sc, si->pid, &msg);
+    nt_strcat(sc, ", ");
 }
 
 static void s_decode_recvmsg_arg2(nt_strcat_t* sc, const nt_syscall_info_t* si)

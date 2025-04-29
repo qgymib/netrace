@@ -2,6 +2,7 @@
 #include "utils/str.h"
 #include "utils/syscall.h"
 #include "__init__.h"
+#include "config.h"
 
 static void s_decode_pwrite64_arg0(nt_strcat_t* sc, const nt_syscall_info_t* si)
 {
@@ -11,20 +12,13 @@ static void s_decode_pwrite64_arg0(nt_strcat_t* sc, const nt_syscall_info_t* si)
 
 static void s_decode_pwrite64_arg1(nt_strcat_t* sc, const nt_syscall_info_t* si)
 {
-    char buff[32];
     if (si->enter.entry.args[1] == 0)
     {
         nt_strcat(sc, "NULL, ");
         return;
     }
 
-    size_t write_sz = NT_MIN(sizeof(buff), si->enter.entry.args[2]);
-    nt_syscall_getdata(si->pid, si->enter.entry.args[1], buff, write_sz);
-    nt_strcat_dump(sc, buff, write_sz);
-    if (write_sz < si->enter.entry.args[2])
-    {
-        nt_strcat(sc, "...");
-    }
+    nt_str_sysdump(sc, si->pid, si->enter.entry.args[1], si->enter.entry.args[2], NT_MAX_DUMP_SIZE);
     nt_strcat(sc, ", ");
 }
 

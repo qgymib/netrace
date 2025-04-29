@@ -6,19 +6,18 @@
 #include <inttypes.h>
 #include <pthread.h>
 #include <stdlib.h>
+#include <limits.h>
 #include "utils/defs.h"
 #include "utils/syscall.h"
 #include "trace/__init__.h"
 #include "config.h"
 #include "str.h"
 
-typedef struct errno_name
-{
-    int         code; /* Error code. */
-    const char* name; /* Error name. */
-} errno_name_t;
+#define HASZERO(x) (((x) - ONES) & (~(x)) & HIGHS)
+#define ONES ((size_t)-1 / UCHAR_MAX)
+#define HIGHS (ONES * (UCHAR_MAX / 2 + 1))
 
-static errno_name_t s_errno_name[] = {
+static nt_type_name_t s_errno_name[] = {
     { E2BIG,           "E2BIG"           },
     { EACCES,          "EACCES"          },
     { EADDRINUSE,      "EADDRINUSE"      },
@@ -174,13 +173,13 @@ static const char* s_escape(int c)
 
 static int s_on_cmp_errno_name(const void* a, const void* b)
 {
-    const errno_name_t* n1 = (errno_name_t*)a;
-    const errno_name_t* n2 = (errno_name_t*)b;
-    if (n1->code == n2->code)
+    const nt_type_name_t* n1 = (nt_type_name_t*)a;
+    const nt_type_name_t* n2 = (nt_type_name_t*)b;
+    if (n1->type == n2->type)
     {
         return 0;
     }
-    return n1->code < n2->code ? -1 : 1;
+    return n1->type < n2->type ? -1 : 1;
 }
 
 static void s_strerrorname_resort_syscall_table()
@@ -252,9 +251,9 @@ const char* nt_strerrorname(int code)
     static pthread_once_t s_once_token = PTHREAD_ONCE_INIT;
     pthread_once(&s_once_token, s_strerrorname_resort_syscall_table);
 
-    errno_name_t  tmp = { code, NULL };
-    errno_name_t* r = bsearch(&tmp, s_errno_name, ARRAY_SIZE(s_errno_name), sizeof(s_errno_name[0]),
-                              s_on_cmp_errno_name);
+    nt_type_name_t  tmp = { code, NULL };
+    nt_type_name_t* r = bsearch(&tmp, s_errno_name, ARRAY_SIZE(s_errno_name),
+                                sizeof(s_errno_name[0]), s_on_cmp_errno_name);
     return r != NULL ? r->name : NULL;
 }
 
@@ -279,7 +278,6 @@ int nt_strcat_dump(nt_strcat_t* sc, void* buff, size_t size)
     int            ret = 0;
     unsigned char* addr = (unsigned char*)buff;
 
-    ret += nt_strcat(sc, "\"");
     for (i = 0; i < size; i++)
     {
         unsigned char c = addr[i];
@@ -297,7 +295,6 @@ int nt_strcat_dump(nt_strcat_t* sc, void* buff, size_t size)
             ret += nt_strcat(sc, "\\x%02x", c);
         }
     }
-    ret += nt_strcat(sc, "\"");
 
     return ret;
 }
@@ -328,38 +325,18 @@ static int s_str_dump_msghdr_msgname(const struct msghdr* msg, pid_t pid, nt_str
         return nt_strcat(sc, "NULL");
     }
 
-    struct sockaddr_storage addr;
-    nt_syscall_get_sockaddr(pid, (uintptr_t)msg->msg_name, &addr, msg->msg_namelen);
-
-    char ip[64];
-    int  port;
-    if (nt_ip_name((struct sockaddr*)&addr, ip, sizeof(ip), &port) != 0)
-    {
-        return nt_strcat(sc, "EINVAL");
-    }
-
-    return nt_strcat(sc, "{domain=%s, addr=%s, port=%d}", nt_socket_domain_name(addr.ss_family), ip,
-                     port);
+    return nt_str_sysdump_sockaddr(sc, pid, (uintptr_t)msg->msg_name, msg->msg_namelen);
 }
 
 static int s_str_dump_msghdr_msgcontrol(const struct msghdr* msg, pid_t pid, nt_strcat_t* sc)
 {
-    int           ret = 0;
-    unsigned char buff[NT_MAX_DUMP_SIZE];
     if (msg->msg_control == NULL)
     {
         return nt_strcat(sc, "NULL");
     }
 
-    size_t buff_sz = NT_MIN(sizeof(buff), msg->msg_controllen);
-    nt_syscall_getdata(pid, (uintptr_t)msg->msg_control, buff, buff_sz);
-    ret += nt_strcat_dump(sc, buff, buff_sz);
-    if (buff_sz < msg->msg_controllen)
-    {
-        ret += nt_strcat(sc, "...");
-    }
-
-    return ret;
+    return nt_str_sysdump(sc, pid, (uintptr_t)msg->msg_control, msg->msg_controllen,
+                          NT_MAX_DUMP_SIZE);
 }
 
 static int s_str_sysdump_iovec_one(const struct iovec* iov, size_t size, pid_t pid, nt_strcat_t* sc)
@@ -368,7 +345,7 @@ static int s_str_sysdump_iovec_one(const struct iovec* iov, size_t size, pid_t p
     size_t dump_sz = NT_MIN(iov->iov_len, size);
 
     ret += nt_strcat(sc, "{iov_base=");
-    ret += nt_str_sysdump(sc, pid, (uintptr_t)iov->iov_base, dump_sz);
+    ret += nt_str_sysdump(sc, pid, (uintptr_t)iov->iov_base, dump_sz, NT_MAX_DUMP_SIZE);
     ret += nt_strcat(sc, ",iov_len=%lu}", (unsigned long)iov->iov_len);
 
     return ret;
@@ -416,7 +393,7 @@ int nt_str_sysdump_iovec(nt_strcat_t* sc, pid_t pid, uintptr_t iov, int iovcnt, 
     return ret;
 }
 
-int nt_str_dump_msghdr(const struct msghdr* msg, pid_t pid, nt_strcat_t* sc)
+int nt_str_sysdump_msghdr(nt_strcat_t* sc, pid_t pid, const struct msghdr* msg)
 {
     int ret = 0;
 
@@ -432,20 +409,24 @@ int nt_str_dump_msghdr(const struct msghdr* msg, pid_t pid, nt_strcat_t* sc)
     return ret;
 }
 
-int nt_str_sysdump(nt_strcat_t* sc, pid_t pid, uintptr_t addr, size_t size)
+int nt_str_sysdump(nt_strcat_t* sc, pid_t pid, uintptr_t addr, size_t size, size_t maxsize)
 {
-    int           ret = 0;
-    unsigned char buff[NT_MAX_DUMP_SIZE];
-    size_t        read_sz = NT_MIN(sizeof(buff), size);
+    int               ret = 0;
+    size_t            offset = 0;
+    nt_syscall_word_t word;
 
-    if (addr == 0)
+    ret += nt_strcat(sc, "\"");
+    while (offset < size && offset < maxsize)
     {
-        return nt_strcat(sc, "NULL");
-    }
-    nt_syscall_getdata(pid, addr, buff, read_sz);
+        size_t left_sz = size - offset;
+        size_t dump_sz = NT_MIN(sizeof(word.buf), left_sz);
+        nt_syscall_getdata(pid, addr + offset, word.buf, dump_sz);
 
-    ret += nt_strcat_dump(sc, buff, read_sz);
-    if (read_sz < size)
+        ret += nt_strcat_dump(sc, word.buf, dump_sz);
+        offset += dump_sz;
+    }
+    ret += nt_strcat(sc, "\"");
+    if (offset >= maxsize)
     {
         ret += nt_strcat(sc, "...");
     }
@@ -453,18 +434,32 @@ int nt_str_sysdump(nt_strcat_t* sc, pid_t pid, uintptr_t addr, size_t size)
     return ret;
 }
 
-int nt_str_sysdump_str(nt_strcat_t* sc, pid_t pid, uintptr_t addr)
+int nt_str_sysdump_str(nt_strcat_t* sc, pid_t pid, uintptr_t addr, size_t maxsize)
 {
-    int  ret;
-    char buff[NT_MAX_DUMP_SIZE];
-    if ((ret = nt_syscall_get_string(pid, addr, buff, sizeof(buff))) < 0)
-    {
-        return ret;
-    }
+    nt_syscall_word_t word;
+    int               ret = 0;
+    size_t            offset = 0;
+    unsigned char*    eol = NULL;
 
-    size_t dump_sz = ((size_t)ret >= sizeof(buff)) ? (sizeof(buff) - 1) : (size_t)ret;
-    ret = nt_strcat_dump(sc, buff, dump_sz);
-    if (dump_sz == (sizeof(buff) - 1))
+    ret += nt_strcat(sc, "\"");
+    while (offset < maxsize)
+    {
+        nt_syscall_getdata(pid, addr + offset, word.buf, sizeof(word.buf));
+        if (HASZERO(word.val))
+        {
+            eol = memchr(word.buf, '\0', sizeof(word.buf));
+            size_t sz = eol - word.buf;
+            ret += nt_strcat_dump(sc, word.buf, sz);
+            offset += sz;
+            break;
+        }
+
+        ret += nt_strcat_dump(sc, word.buf, sizeof(word.buf));
+        offset += sizeof(word.buf);
+    }
+    ret += nt_strcat(sc, "\"");
+
+    if (eol == NULL)
     {
         ret += nt_strcat(sc, "...");
     }
@@ -489,8 +484,9 @@ int nt_str_dump_sockaddr(nt_strcat_t* sc, const struct sockaddr* addr)
     }
     else if (addr->sa_family == AF_UNIX)
     {
-        ret += nt_strcat(sc, ",path=");
+        ret += nt_strcat(sc, ",path=\"");
         ret += nt_strcat_dump(sc, ip, strlen(ip));
+        ret += nt_strcat(sc, "\"");
     }
     ret += nt_strcat(sc, "}");
 

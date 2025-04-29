@@ -3,6 +3,7 @@
 #include "utils/socket.h"
 #include "utils/str.h"
 #include "__init__.h"
+#include "config.h"
 
 static void s_decode_sendto_arg0(nt_strcat_t* sc, const nt_syscall_info_t* si)
 {
@@ -12,20 +13,13 @@ static void s_decode_sendto_arg0(nt_strcat_t* sc, const nt_syscall_info_t* si)
 
 static void s_decode_sendto_arg1(nt_strcat_t* sc, const nt_syscall_info_t* si)
 {
-    char   buff[32];
-    size_t buff_sz = NT_MIN(sizeof(buff), si->enter.entry.args[2]);
     if (si->enter.entry.args[1] == 0)
     {
         nt_strcat(sc, "NULL, ");
         return;
     }
 
-    nt_syscall_getdata(si->pid, si->enter.entry.args[1], buff, buff_sz);
-    nt_strcat_dump(sc, buff, buff_sz);
-    if (buff_sz < si->enter.entry.args[2])
-    {
-        nt_strcat(sc, "...");
-    }
+    nt_str_sysdump(sc, si->pid, si->enter.entry.args[1], si->enter.entry.args[2], NT_MAX_DUMP_SIZE);
     nt_strcat(sc, ", ");
 }
 
@@ -53,29 +47,14 @@ static void s_decode_sendto_arg3(nt_strcat_t* sc, const nt_syscall_info_t* si)
 
 static void s_decode_sendto_arg4(nt_strcat_t* sc, const nt_syscall_info_t* si)
 {
-    struct sockaddr_storage addr;
     if (si->enter.entry.args[4] == 0)
     {
         nt_strcat(sc, "NULL, ");
         return;
     }
-    socklen_t addrlen = si->enter.entry.args[5];
-    if (nt_syscall_get_sockaddr(si->pid, si->enter.entry.args[4], &addr, addrlen) != 0)
-    {
-        nt_strcat(sc, "EINVAL, ");
-        return;
-    }
 
-    char ip[64];
-    int  port = 0;
-    if (nt_ip_name((struct sockaddr*)&addr, ip, sizeof(ip), &port) != 0)
-    {
-        nt_strcat(sc, "EINVAL, ");
-        return;
-    }
-
-    nt_strcat(sc, "{domain=%s, addr=%s, port=%d}, ", nt_socket_domain_name(addr.ss_family), ip,
-              port);
+    nt_str_sysdump_sockaddr(sc, si->pid, si->enter.entry.args[4], si->enter.entry.args[5]);
+    nt_strcat(sc, ", ");
 }
 
 static void s_decode_sendto_arg5(nt_strcat_t* sc, const nt_syscall_info_t* si)

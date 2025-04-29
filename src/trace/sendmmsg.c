@@ -27,7 +27,7 @@ static void s_decode_sendmmsg_arg1(nt_strcat_t* sc, const nt_syscall_info_t* si)
         struct mmsghdr* msg = &msgvec[i];
         struct msghdr*  hdr = &msg->msg_hdr;
         nt_strcat(sc, "msg_hdr=");
-        nt_str_dump_msghdr(hdr, si->pid, sc);
+        nt_str_sysdump_msghdr(sc, si->pid, hdr);
         nt_strcat(sc, "msg_len=%u", msg->msg_len);
         nt_strcat(sc, "}%s", i == hdr_len - 1 ? "" : ",");
     }

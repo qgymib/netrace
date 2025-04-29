@@ -3,6 +3,7 @@
 #include "utils/str.h"
 #include "utils/syscall.h"
 #include "__init__.h"
+#include "config.h"
 
 static void s_decode_write_arg0(nt_strcat_t* sc, const nt_syscall_info_t* si)
 {
@@ -12,15 +13,13 @@ static void s_decode_write_arg0(nt_strcat_t* sc, const nt_syscall_info_t* si)
 
 static void s_decode_write_arg1(nt_strcat_t* sc, const nt_syscall_info_t* si)
 {
-    unsigned char tmp[32];
-    size_t        read_sz = NT_MIN(si->enter.entry.args[2], sizeof(tmp));
-    nt_syscall_getdata(si->pid, si->enter.entry.args[1], tmp, read_sz);
-
-    nt_strcat_dump(sc, tmp, read_sz);
-    if (read_sz < si->enter.entry.args[2])
+    if (si->enter.entry.args[1] == 0)
     {
-        nt_strcat(sc, "...");
+        nt_strcat(sc, "NULL, ");
+        return;
     }
+
+    nt_str_sysdump(sc, si->pid, si->enter.entry.args[1], si->enter.entry.args[2], NT_MAX_DUMP_SIZE);
     nt_strcat(sc, ", ");
 }
 

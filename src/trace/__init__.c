@@ -114,7 +114,7 @@ static syscall_entry_t s_syscall_entry[] = {
     { SYS_execveat,                "execveat",                NULL                          },
     { SYS_exit,                    "exit",                    NULL                          },
     { SYS_exit_group,              "exit_group",              NULL                          },
-    { SYS_faccessat,               "faccessat",               NULL                          },
+    { SYS_faccessat,               "faccessat",               nt_syscall_decode_faccessat   },
     { SYS_faccessat2,              "faccessat2",              NULL                          },
     { SYS_fadvise64,               "fadvise64",               NULL                          },
     { SYS_fallocate,               "fallocate",               NULL                          },

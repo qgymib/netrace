@@ -4,6 +4,7 @@
 #include "utils/syscall.h"
 #include "utils/str.h"
 #include "__init__.h"
+#include "config.h"
 
 /**
  * @brief Socket option decode function.
@@ -129,14 +130,12 @@ static void s_decode_setsockopt_tos(nt_strcat_t* sc, const nt_syscall_info_t* si
 static void s_decode_setsockopt_unknown(nt_strcat_t* sc, const nt_syscall_info_t* si,
                                         socklen_t optlen)
 {
-    char   buff[32];
-    size_t read_sz = NT_MIN(sizeof(buff), optlen);
-    nt_syscall_getdata(si->pid, si->enter.entry.args[3], buff, read_sz);
-    nt_strcat_dump(sc, buff, read_sz);
-    if (read_sz < optlen)
+    if (si->enter.entry.args[3] == 0)
     {
-        nt_strcat(sc, "...");
+        nt_strcat(sc, "NULL");
+        return;
     }
+    nt_str_sysdump(sc, si->pid, si->enter.entry.args[3], optlen, NT_MAX_DUMP_SIZE);
 }
 
 /**

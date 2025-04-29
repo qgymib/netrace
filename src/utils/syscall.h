@@ -9,6 +9,11 @@
 extern "C" {
 #endif
 
+typedef union nt_syscall_word {
+    unsigned long val;
+    unsigned char buf[sizeof(unsigned long)];
+} nt_syscall_word_t;
+
 /**
  * @brief Get syscall ID.
  * @param[in] pid   Process ID.
@@ -72,7 +77,8 @@ int nt_syscall_get_sockaddr(pid_t pid, uintptr_t addr, struct sockaddr_storage* 
  * @param[in] data  Socket address.
  * @param[in] size Max write size.
  */
-int nt_syscall_set_sockaddr(pid_t pid, uintptr_t addr, const struct sockaddr_storage* data, size_t size);
+int nt_syscall_set_sockaddr(pid_t pid, uintptr_t addr, const struct sockaddr_storage* data,
+                            size_t size);
 
 /**
  * @brief Get string.

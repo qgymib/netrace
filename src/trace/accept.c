@@ -11,7 +11,6 @@ static void s_decode_accept_arg0(nt_strcat_t* sc, const nt_syscall_info_t* si)
 
 static void s_decode_accpet_arg1(nt_strcat_t* sc, const nt_syscall_info_t* si, socklen_t addrlen)
 {
-    struct sockaddr_storage addr;
     if (si->enter.entry.args[1] == 0 || addrlen == 0)
     {
         nt_strcat(sc, "NULL, ");
@@ -23,16 +22,8 @@ static void s_decode_accpet_arg1(nt_strcat_t* sc, const nt_syscall_info_t* si, s
         return;
     }
 
-    nt_syscall_get_sockaddr(si->pid, si->enter.entry.args[1], &addr, addrlen);
-
-    char ip[64];
-    int  port = 0;
-    if (nt_ip_name((struct sockaddr*)&addr, ip, sizeof(ip), &port) != 0)
-    {
-        nt_strcat(sc, "EINVAL, ");
-    }
-    nt_strcat(sc, "{domain=%s, addr=%s, port=%d}, ", nt_socket_domain_name(addr.ss_family), ip,
-              port);
+    nt_str_sysdump_sockaddr(sc, si->pid, si->enter.entry.args[1], addrlen);
+    nt_strcat(sc, ", ");
 }
 
 static void s_decode_accpet_arg2(nt_strcat_t* sc, const nt_syscall_info_t* si, socklen_t addrlen)

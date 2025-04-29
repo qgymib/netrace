@@ -1,5 +1,6 @@
 #include "utils/str.h"
 #include "__init__.h"
+#include "config.h"
 
 static void s_decode_read_arg0(nt_strcat_t* sc, const nt_syscall_info_t* si)
 {
@@ -19,7 +20,8 @@ static void s_decode_read_arg1(nt_strcat_t* sc, const nt_syscall_info_t* si)
         return;
     }
 
-    nt_str_sysdump(sc, si->pid, si->enter.entry.args[1], si->leave.exit.rval);
+    nt_str_sysdump(sc, si->pid, si->enter.entry.args[1], si->leave.exit.rval, NT_MAX_DUMP_SIZE);
+    nt_strcat(sc, ", ");
 }
 
 static void s_decode_read_arg2(nt_strcat_t* sc, const nt_syscall_info_t* si)

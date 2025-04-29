@@ -9,11 +9,6 @@
 #include "utils/log.h"
 #include "syscall.h"
 
-typedef union syscall_word {
-    long          val;
-    unsigned char buf[sizeof(long)];
-} syscall_word_t;
-
 #if defined(__x86_64__)
 
 /* clang-format off */
@@ -145,8 +140,8 @@ void nt_syscall_set_arg(pid_t pid, size_t idx, long val)
 
 void nt_syscall_getdata(pid_t pid, uintptr_t addr, void* dst, size_t len)
 {
-    size_t         read_sz = 0;
-    syscall_word_t word;
+    size_t            read_sz = 0;
+    nt_syscall_word_t word;
 
     while (read_sz < len)
     {
@@ -165,8 +160,8 @@ void nt_syscall_getdata(pid_t pid, uintptr_t addr, void* dst, size_t len)
 
 void nt_syscall_setdata(pid_t pid, uintptr_t addr, const void* src, size_t len)
 {
-    size_t         write_sz = 0;
-    syscall_word_t word;
+    size_t            write_sz = 0;
+    nt_syscall_word_t word;
 
     while (write_sz < len)
     {
@@ -189,7 +184,7 @@ int nt_syscall_get_sockaddr(pid_t pid, uintptr_t addr, struct sockaddr_storage* 
      * Try get address type.
      * Note the type is `unsigned short`, but syscall must align to `word`, so we just get `word`.
      */
-    nt_syscall_getdata(pid, addr, data, sizeof(syscall_word_t));
+    nt_syscall_getdata(pid, addr, data, sizeof(nt_syscall_word_t));
 
     size_t data_len = 0;
     switch (data->ss_family)
@@ -211,9 +206,9 @@ int nt_syscall_get_sockaddr(pid_t pid, uintptr_t addr, struct sockaddr_storage* 
         return NT_ERR(EINVAL);
     }
 
-    size_t left_sz = data_len - sizeof(syscall_word_t);
-    void* dst = (char*)data + sizeof(syscall_word_t);
-    nt_syscall_getdata(pid, addr + sizeof(syscall_word_t), dst, left_sz);
+    size_t left_sz = data_len - sizeof(nt_syscall_word_t);
+    void*  dst = (char*)data + sizeof(nt_syscall_word_t);
+    nt_syscall_getdata(pid, addr + sizeof(nt_syscall_word_t), dst, left_sz);
 
     return 0;
 }
@@ -235,9 +230,9 @@ int nt_syscall_set_sockaddr(pid_t pid, uintptr_t addr, const struct sockaddr_sto
 
 int nt_syscall_get_string(pid_t pid, uintptr_t addr, char* buff, size_t size)
 {
-    size_t         offset = 0;
-    void*          eol = NULL;
-    syscall_word_t word;
+    size_t            offset = 0;
+    void*             eol = NULL;
+    nt_syscall_word_t word;
 
     while (offset < size && eol == NULL)
     {

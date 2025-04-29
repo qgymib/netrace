@@ -1,6 +1,7 @@
 #include <fcntl.h>
 #include "utils/str.h"
 #include "__init__.h"
+#include "config.h"
 
 static void s_decode_openat_arg0(nt_strcat_t* sc, const nt_syscall_info_t* si)
 {
@@ -17,7 +18,7 @@ static void s_decode_openat_arg0(nt_strcat_t* sc, const nt_syscall_info_t* si)
 
 static void s_decode_openat_arg1(nt_strcat_t* sc, const nt_syscall_info_t* si)
 {
-    nt_str_sysdump_str(sc, si->pid, si->enter.entry.args[1]);
+    nt_str_sysdump_str(sc, si->pid, si->enter.entry.args[1], NT_MAX_DUMP_SIZE);
     nt_strcat(sc, ", ");
 }
 
