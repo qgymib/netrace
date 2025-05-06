@@ -1,64 +1,16 @@
 #ifndef NT_RUNTIME_H
 #define NT_RUNTIME_H
 
-#include "dns.h"
+#include "proxy/__init__.h"
 #include "trace/__init__.h"
 #include "utils/map.h"
-#include "utils/urlparser.h"
 #include "utils/ipfilter.h"
 #include "utils/cmdoption.h"
+#include "dns.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-typedef struct nt_proxy
-{
-    /**
-     * @brief Release this object.
-     * @param[in] thiz  Object handle.
-     */
-    void (*release)(struct nt_proxy* thiz);
-
-    /**
-     * @brief Create a channel for proxy data.
-     * @param[in] thiz  Object handle.
-     * @param[in] type SOCK_STREAM / SOCK_DGRAM
-     * @param[in] peeraddr Peer address.
-     * @param[out] proxyaddr For SOCK_STREAM, this is the address connect to. For SOCK_DGRAM, this
-     * is the address sendto. It is
-     * @return Channel handle.
-     */
-    int (*channel_create)(struct nt_proxy* thiz, int type, const struct sockaddr* peeraddr,
-                          struct sockaddr_storage* proxyaddr);
-
-    /**
-     * @brief Release a channel.
-     * @param[in] thiz  Object handle.
-     * @param[in] channel Channel.
-     */
-    void (*channel_release)(struct nt_proxy* thiz, int channel);
-} nt_proxy_t;
-
-typedef struct nt_proxy_protocol
-{
-    /**
-     * @brief Scheme.
-     *
-     * ```
-     * URI = scheme ":" ["//" authority] path ["?" query] ["#" fragment]
-     * ```
-     */
-    const char* scheme;
-
-    /**
-     * @brief Create a new proxy object.
-     * @param[out] proxy Proxy object.
-     * @param[in] url URL.
-     * @return 0 if success, errno if failed.
-     */
-    int (*make)(nt_proxy_t** proxy, const url_comp_t* url);
-} nt_proxy_protocol_t;
 
 typedef struct sock_node
 {
@@ -100,9 +52,6 @@ typedef struct runtime
  * @brief Global runtime.
  */
 extern runtime_t* G;
-
-extern const nt_proxy_protocol_t nt_proxy_protocol_raw;
-extern const nt_proxy_protocol_t nt_proxy_protocol_socks5;
 
 /**
  * @brief Program entrypoint.

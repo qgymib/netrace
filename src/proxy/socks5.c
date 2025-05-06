@@ -13,6 +13,7 @@
 #include "utils/defs.h"
 #include "utils/memory.h"
 #include "utils/list.h"
+#include "utils/map.h"
 #include "utils/socket.h"
 #include "utils/log.h"
 #include "__init__.h"
@@ -344,6 +345,16 @@ static void s_socks5_outbound_want_write(nt_proxy_socks5_t* socks5, socks5_chann
     }
 }
 
+static void s_socks5_outbound_stop_write(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
+{
+    if ((ch->outbound.event.events & EPOLLOUT) && ch->outbound.event.data.fd >= 0)
+    {
+        ch->outbound.event.events &= ~EPOLLOUT;
+        int op = ch->outbound.event.events == 0 ? EPOLL_CTL_DEL : EPOLL_CTL_MOD;
+        epoll_ctl(socks5->epollfd, op, ch->outbound.event.data.fd, &ch->outbound.event);
+    }
+}
+
 static void s_socks5_outbound_want_read(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
 {
     if (!(ch->outbound.event.events & EPOLLIN) && ch->outbound.event.data.fd >= 0)
@@ -414,23 +425,22 @@ static void s_socks5_inbound_tcp_w(nt_proxy_socks5_t* socks5, socks5_channel_t* 
         s_socks5_close_inbound(socks5, ch);
         return;
     }
-    else
-    {
-        ch->dbuf_sz -= write_sz;
-    }
+    ch->dbuf_sz -= write_sz;
 
     if (ch->dbuf_sz < sizeof(ch->dbuf))
     {
         s_socks5_outbound_want_read(socks5, ch);
     }
+
     if (ch->dbuf_sz > 0)
     {
         memmove(ch->dbuf, ch->dbuf + write_sz, ch->dbuf_sz);
-        return;
+        s_socks5_inbound_want_write(socks5, ch);
     }
-
-    /* dbuf is empty, stop write. */
-    s_socks5_inbound_stop_write(socks5, ch);
+    else
+    {
+        s_socks5_inbound_stop_write(socks5, ch);
+    }
 }
 
 static void s_socks5_inbound_accept(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
@@ -514,9 +524,13 @@ static void s_socks5_outbound_stage_tcp_finish_w(nt_proxy_socks5_t* socks5, sock
         s_socks5_inbound_want_read(socks5, ch);
     }
 
-    if (ch->ubuf_sz != 0)
+    if (ch->ubuf_sz > 0)
     { /* Outbound should write data. */
         s_socks5_outbound_want_write(socks5, ch);
+    }
+    else
+    {
+        s_socks5_outbound_stop_write(socks5, ch);
     }
 }
 

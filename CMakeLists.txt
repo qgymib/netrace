@@ -25,10 +25,12 @@ endfunction()
 ###############################################################################
 
 add_library(lib${PROJECT_NAME} STATIC
+    "src/proxy/__init__.c"
+    "src/proxy/raw.c"
+    "src/proxy/socks5.c"
     "src/runtime/__init__.c"
+    "src/runtime/chain.c"
     "src/runtime/dns.c"
-    "src/runtime/raw.c"
-    "src/runtime/socks5.c"
     "src/trace/__init__.c"
     "src/trace/accept.c"
     "src/trace/accept4.c"

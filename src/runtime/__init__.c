@@ -52,11 +52,6 @@ typedef struct log_level_pair
 
 runtime_t* G = NULL;
 
-static const nt_proxy_protocol_t* s_protocols[] = {
-    &nt_proxy_protocol_raw,
-    &nt_proxy_protocol_socks5,
-};
-
 static const nt_ipfilter_item_t s_ipfilter[] = {
     /* Ignore loopback */
     { SOCK_STREAM, "127.0.0.1",   32,  0 },
@@ -687,41 +682,6 @@ static int s_setup_dns_proxy(url_comp_t* url)
     G->dns_chid = ret;
 
     return nt_dns_proxy_create(&G->dns, &config);
-}
-
-/**
- * @brief Create a proxy object.
- * @param[out] proxy Proxy object.
- * @param[in] url Url.
- * @return 0 if success, errno if failed.
- */
-static int nt_proxy_create(nt_proxy_t** proxy, const char* url)
-{
-    url_comp_t* comp = NULL;
-    int         ret = nt_url_comp_parser(&comp, url);
-    if (ret != 0)
-    {
-        LOG_E("Parser url failed: (%d) %s.", ret, strerror(ret));
-        exit(EXIT_FAILURE);
-    }
-
-    size_t i;
-    for (i = 0; i < ARRAY_SIZE(s_protocols); i++)
-    {
-        const nt_proxy_protocol_t* protocol = s_protocols[i];
-        if (strcmp(protocol->scheme, comp->scheme) == 0)
-        {
-            ret = protocol->make(proxy, comp);
-            goto finish;
-        }
-    }
-
-    LOG_E("Unknown protocol `%s`.", comp->scheme);
-    ret = NT_ERR(ENOTSUP);
-
-finish:
-    nt_url_comp_free(comp);
-    return ret;
 }
 
 /**

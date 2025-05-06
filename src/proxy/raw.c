@@ -7,6 +7,7 @@
 #include "utils/defs.h"
 #include "utils/memory.h"
 #include "utils/list.h"
+#include "utils/map.h"
 #include "utils/socket.h"
 #include "utils/log.h"
 #include "config.h"
@@ -273,6 +274,16 @@ static void s_raw_inbound_stop_read(nt_proxy_raw_t* raw, proxy_raw_channel_t* ch
     }
 }
 
+static void s_raw_inbound_want_write(nt_proxy_raw_t* raw, proxy_raw_channel_t* ch)
+{
+    if (ch->inbound.event.data.fd >= 0 && !(ch->inbound.event.events & EPOLLOUT))
+    {
+        int op = ch->inbound.event.events == 0 ? EPOLL_CTL_ADD : EPOLL_CTL_MOD;
+        ch->inbound.event.events |= EPOLLOUT;
+        epoll_ctl(raw->epollfd, op, ch->inbound.event.data.fd, &ch->inbound.event);
+    }
+}
+
 static void s_raw_inbound_stop_write(nt_proxy_raw_t* raw, proxy_raw_channel_t* ch)
 {
     if (ch->inbound.event.data.fd >= 0 && (ch->inbound.event.events & EPOLLOUT))
@@ -400,18 +411,19 @@ static void s_proxy_raw_handle_inbound_w(nt_proxy_raw_t* raw, proxy_raw_channel_
     }
     ch->dbuf_sz -= write_sz;
 
+    if (ch->dbuf_sz < sizeof(ch->dbuf))
+    {
+        s_raw_outbound_want_read(raw, ch);
+    }
+
     if (ch->dbuf_sz > 0)
     { /* dbuf is not empty, move buffer and try again. */
         memmove(ch->dbuf, ch->dbuf + write_sz, ch->dbuf_sz);
+        s_raw_inbound_want_write(raw, ch);
     }
     else
     { /* dbuf is empty, remove EPOLLOUT */
         s_raw_inbound_stop_write(raw, ch);
-    }
-
-    if (ch->dbuf_sz < sizeof(ch->dbuf))
-    {
-        s_raw_outbound_want_read(raw, ch);
     }
 }
 
@@ -535,7 +547,7 @@ static void s_proxy_raw_handle_outbound_r(nt_proxy_raw_t* raw, proxy_raw_channel
     }
     ch->dbuf_sz += read_sz;
 
-    s_raw_outbound_want_write(raw, ch);
+    s_raw_inbound_want_write(raw, ch);
 
     /* If dbuf is full, remove EPOLLIN for outbound. */
     if (ch->dbuf_sz == sizeof(ch->dbuf))
