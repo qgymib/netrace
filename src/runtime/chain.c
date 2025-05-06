@@ -410,7 +410,7 @@ static void s_chain_handle_tcp_inbound_r(nt_chain_t* chain, nt_chain_node_t* nod
     ssize_t read_sz = nt_read(node->inbound.event.data.fd, buf, buf_sz);
     if (read_sz == 0)
     { /* Peer close. */
-        LOG_D("[CHID=%d] Inbound peer closed. Close inbound.", node->chain_id);
+        LOG_D("[CHAIN=%d] Inbound peer closed. Close inbound.", node->chain_id);
         s_chain_close_inbound(chain, node);
         return;
     }
@@ -418,7 +418,7 @@ static void s_chain_handle_tcp_inbound_r(nt_chain_t* chain, nt_chain_node_t* nod
     { /* Error may occur. */
         if (read_sz != NT_ERR(EAGAIN) && read_sz != NT_ERR(EWOULDBLOCK))
         {
-            LOG_D("[CHID=%d] Inbound read() failed: (%d) %s. Close inbound.", node->chain_id,
+            LOG_D("[CHAIN=%d] Inbound read() failed: (%d) %s. Close inbound.", node->chain_id,
                   read_sz, NT_STRERROR(read_sz));
             s_chain_close_inbound(chain, node);
         }
@@ -440,7 +440,7 @@ static void s_chain_handle_tcp_inbound_w(nt_chain_t* chain, nt_chain_node_t* nod
     ssize_t write_sz = nt_write(node->outbound.event.data.fd, node->dbuf, node->dbuf_sz);
     if (write_sz < 0)
     {
-        LOG_D("[CHID=%d] write() failed: (%d) %s. Close inbound", node->chain_id, write_sz,
+        LOG_D("[CHAIN=%d] write() failed: (%d) %s. Close inbound", node->chain_id, write_sz,
               NT_STRERROR(write_sz));
         s_chain_close_inbound(chain, node);
         return;
@@ -471,7 +471,7 @@ static void s_chain_handle_tcp_outbound_r(nt_chain_t* chain, nt_chain_node_t* no
     ssize_t read_sz = nt_read(node->outbound.event.data.fd, buf, buf_sz);
     if (read_sz == 0)
     { /* Peer close. */
-        LOG_D("[CHID=%d] Outbound peer close. Close outbound.", node->chain_id);
+        LOG_D("[CHAIN=%d] Outbound peer close. Close outbound.", node->chain_id);
         s_chain_close_outbound(chain, node);
         return;
     }
@@ -479,7 +479,7 @@ static void s_chain_handle_tcp_outbound_r(nt_chain_t* chain, nt_chain_node_t* no
     {
         if (read_sz != NT_ERR(EAGAIN) && read_sz != NT_ERR(EWOULDBLOCK))
         {
-            LOG_D("[CHID=%d] read() failed: (%d) %s. Close outbound.", node->chain_id, read_sz,
+            LOG_D("[CHAIN=%d] read() failed: (%d) %s. Close outbound.", node->chain_id, read_sz,
                   NT_STRERROR(read_sz));
             s_chain_close_outbound(chain, node);
         }
@@ -500,7 +500,7 @@ static void s_chain_handle_tcp_outbound_w(nt_chain_t* chain, nt_chain_node_t* no
     ssize_t write_sz = nt_write(node->outbound.event.data.fd, node->ubuf, node->ubuf_sz);
     if (write_sz < 0)
     {
-        LOG_D("[CHID=%d] write() failed: (%d) %s. Close outbound", node->chain_id, write_sz,
+        LOG_D("[CHAIN=%d] write() failed: (%d) %s. Close outbound", node->chain_id, write_sz,
               NT_STRERROR(write_sz));
         s_chain_close_outbound(chain, node);
         return;
@@ -622,19 +622,19 @@ static void s_chain_handle_sock(nt_chain_t* chain, struct epoll_event* event, ch
 
     if (node->inbound.event.data.fd < 0 && node->ubuf_sz == 0 && node->outbound.event.data.fd >= 0)
     {
-        LOG_D("[CHID=%d] Inbound already closed, nothing to upload. Close outbound.",
+        LOG_D("[CHAIN=%d] Inbound already closed, nothing to upload. Close outbound.",
               node->chain_id);
         s_chain_close_outbound(chain, node);
     }
     if (node->outbound.event.data.fd < 0 && node->dbuf_sz == 0 && node->inbound.event.data.fd >= 0)
     {
-        LOG_D("[CHID=%d] Outbound already closed, nothing to download. Close inbound.",
+        LOG_D("[CHAIN=%d] Outbound already closed, nothing to download. Close inbound.",
               node->chain_id);
         s_chain_close_inbound(chain, node);
     }
     if (node->inbound.event.data.fd < 0 && node->outbound.event.data.fd < 0)
     {
-        LOG_D("[CHID=%d] Both inbound and outbound are closed. Release channel.", node->chain_id);
+        LOG_D("[CHAIN=%d] Both inbound and outbound are closed. Release channel.", node->chain_id);
         s_chain_delete(chain, node);
     }
 }
@@ -821,16 +821,20 @@ int nt_chain_new(nt_chain_t* chain, int type, const struct sockaddr* peeraddr,
                  struct sockaddr_storage* proxyaddr, nt_proxy_t* proxy)
 {
     int              ret;
-    nt_chain_node_t* node = nt_calloc(1, sizeof(nt_chain_node_t));
+    nt_chain_node_t* node = nt_malloc(sizeof(nt_chain_node_t));
     node->type = type;
     node->proxy = proxy;
     node->proxy_channel_id = -1;
     node->sv[0] = -1;
     node->sv[1] = -1;
     node->inbound.event.data.fd = -1;
+    node->inbound.event.events = 0;
     node->inbound.chain = node;
     node->outbound.event.data.fd = -1;
+    node->outbound.event.events = 0;
     node->outbound.chain = node;
+    node->ubuf_sz = 0;
+    node->dbuf_sz = 0;
     nt_sockaddr_copy((struct sockaddr*)&node->peer_addr, peeraddr);
 
     if ((ret = s_chain_new_by_type(node, type)) != 0)

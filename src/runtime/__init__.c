@@ -69,6 +69,16 @@ static const nt_ipfilter_item_t s_ipfilter[] = {
     { SOCK_DGRAM,  "fe80::",      10,  0 },
 };
 
+/* clang-format off */
+static const char* s_welcome =
+CMAKE_PROJECT_NAME " - Trace and redirect network traffic (built on " __DATE__
+#if defined(NT_VERSION)
+", " NT_VERSION
+#endif
+")"
+;
+/* clang-format on */
+
 static int do_child(const nt_cmd_opt_t* opt, int prog_pipe[2])
 {
     int code = 0;
@@ -818,6 +828,11 @@ static nt_log_level_t s_cmd_opt_parse_loglevel(const char* level)
     return NT_LOG_INFO;
 }
 
+static void s_show_welcome(void)
+{
+    fprintf(stdout, "%s\n", s_welcome);
+}
+
 int nt_run(const nt_cmd_opt_t* opt)
 {
     int ret;
@@ -838,6 +853,7 @@ int nt_run(const nt_cmd_opt_t* opt)
         return do_child(opt, prog_pipe);
     }
 
+    s_show_welcome();
     ret = do_parent(opt, prog_pipe, prog_pid);
     nt_runtime_cleanup();
 
