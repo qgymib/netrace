@@ -6,6 +6,7 @@
 #include "utils/map.h"
 #include "utils/ipfilter.h"
 #include "utils/cmdoption.h"
+#include "chain.h"
 #include "dns.h"
 
 #ifdef __cplusplus
@@ -40,6 +41,7 @@ typedef struct runtime
 {
     nt_proxy_t*     proxy; /* Proxy object. */
     nt_ipfilter_t*  ipfilter;
+    nt_chain_t*     chain;
     nt_dns_proxy_t* dns;
     int             dns_chid;
 

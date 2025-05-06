@@ -43,18 +43,6 @@ typedef struct socks5_channel
     int                     type; /* #SOCK_STREAM or #SOCK_DGRAM */
     union {
         /**
-         * @brief Valid if #socks5_channel_t::type is #SOCK_STREAM.
-         */
-        struct
-        {
-            /**
-             * @brief whether #socks5_channel_t::inbound::event::data::fd is a listen fd or a client
-             * fd.
-             */
-            int islisten;
-        } tcp;
-
-        /**
          * @brief Valid if #socks5_channel_t::type is #SOCK_DGRAM.
          * #socks5_channel_t::udp::relay_fd is the socket comminucate with socks5 UDP relay server.
          */
@@ -65,11 +53,6 @@ typedef struct socks5_channel
              * If starge != SOCKS5_FINISH, this is the socket for UDP relay server.
              */
             int associate_fd;
-
-            /**
-             * @brief The address connect to inbound.
-             */
-            struct sockaddr_storage inbound_addr;
         } udp;
     } u;
     socks5_sock_t  inbound;
@@ -79,7 +62,6 @@ typedef struct socks5_channel
     size_t         dbuf_sz;                     /* Data size in download buffer. */
     uint8_t        ubuf[NT_SOCKET_BUFFER_SIZE]; /* Upload buffer. From inbound to outbound. */
     uint8_t        dbuf[NT_SOCKET_BUFFER_SIZE]; /* Download buffer. From outbound to inbound. */
-    struct sockaddr_storage proxyaddr;          /* Proxy address. */
     struct sockaddr_storage peeraddr;           /* Peer address. Program dest address. */
     struct sockaddr_storage bindaddr;           /* Socks5 bind address. */
 } socks5_channel_t;
@@ -443,28 +425,6 @@ static void s_socks5_inbound_tcp_w(nt_proxy_socks5_t* socks5, socks5_channel_t* 
     }
 }
 
-static void s_socks5_inbound_accept(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
-{
-    int fd = nt_accept(ch->inbound.event.data.fd);
-    if (fd < 0)
-    {
-        LOG_D("[CHID=%d] Accept failed: (%d) %s.", ch->chid, fd, NT_STRERROR(fd));
-        s_socks5_close_inbound_outbound(socks5, ch);
-        return;
-    }
-
-    /* Close and register connection for read. */
-    LOG_D("[CHID=%d] Replace inbound with accepted client connection.", ch->chid);
-    s_socks5_close_inbound(socks5, ch);
-    ch->inbound.event.data.fd = fd;
-    /* clang-format off */
-    NT_ASSERT(ev_map_insert(&socks5->sock_map, &ch->inbound.node) == NULL,
-        "ch=%d fd=%d", ch->chid, ch->inbound.event.data.fd);
-    /* clang-format on */
-    ch->inbound.event.events = EPOLLIN;
-    epoll_ctl(socks5->epollfd, EPOLL_CTL_ADD, fd, &ch->inbound.event);
-}
-
 static void s_socks5_inbound_read(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
 {
     int      ret;
@@ -503,18 +463,6 @@ static void s_socks5_inbound_read(nt_proxy_socks5_t* socks5, socks5_channel_t* c
     {
         s_socks5_outbound_want_write(socks5, ch);
     }
-}
-
-static void s_socks5_inbound_tcp_r(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
-{
-    if (ch->u.tcp.islisten)
-    {
-        ch->u.tcp.islisten = 0;
-        s_socks5_inbound_accept(socks5, ch);
-        return;
-    }
-
-    s_socks5_inbound_read(socks5, ch);
 }
 
 static void s_socks5_outbound_stage_tcp_finish_w(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
@@ -805,12 +753,6 @@ static void s_socks5_outbound_stage_finish_r(nt_proxy_socks5_t* socks5, socks5_c
         s_socks5_outbound_stop_read(socks5, ch);
     }
 
-    /* If inbound still waiting for accept, do nothing. */
-    if (ch->u.tcp.islisten)
-    {
-        return;
-    }
-
     /* Write to inbound. */
     s_socks5_inbound_want_write(socks5, ch);
 }
@@ -935,9 +877,7 @@ static void s_socks5_inbound_udp_r(nt_proxy_socks5_t* socks5, socks5_channel_t* 
     uint8_t*         buf = ch->ubuf + ch->ubuf_sz;
     size_t           bufsz = sizeof(ch->ubuf) - ch->ubuf_sz;
     int              fd = ch->inbound.event.data.fd;
-    struct sockaddr* addr = (struct sockaddr*)&ch->u.udp.inbound_addr;
-    socklen_t        addrlen = sizeof(ch->u.udp.inbound_addr);
-    ssize_t          recv_sz = recvfrom(fd, buf, bufsz, 0, addr, &addrlen);
+    ssize_t          recv_sz = nt_read(fd, buf, bufsz);
     if (recv_sz < 0)
     {
         s_socks5_close_inbound_outbound(socks5, ch);
@@ -998,9 +938,7 @@ static void s_socks5_outbound_udp_r(nt_proxy_socks5_t* socks5, socks5_channel_t*
 
     uint8_t*         buff = ch->dbuf + offset;
     size_t           buffsz = read_sz - offset;
-    struct sockaddr* addr = (struct sockaddr*)&ch->u.udp.inbound_addr;
-    socklen_t        addrlen = sizeof(ch->u.udp.inbound_addr);
-    if (sendto(ch->inbound.event.data.fd, buff, buffsz, 0, addr, addrlen) < 0)
+    if (nt_write(ch->inbound.event.data.fd, buff, buffsz) < 0)
     {
         LOG_W("[CHID=%d] sendto() failed: (%d) %s.", ch->chid, errno, strerror(errno));
         s_socks5_close_inbound_outbound(socks5, ch);
@@ -1028,7 +966,7 @@ static void s_socks5_handle_common(nt_proxy_socks5_t* socks5, socks5_channel_t* 
             }
             if (event->events & EPOLLIN)
             {
-                s_socks5_inbound_tcp_r(socks5, ch);
+                s_socks5_inbound_read(socks5, ch);
             }
         }
         else if (ch->type == SOCK_DGRAM)
@@ -1234,28 +1172,14 @@ static int s_socks5_on_cmp_sock(const ev_map_node_t* key1, const ev_map_node_t* 
 
 static int s_socks5_channel_tcp_make(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
 {
-    int         ret;
-    int         family = ch->peeraddr.ss_family;
-    const char* ip = (family == AF_INET) ? "127.0.0.1" : "::1";
-
-    ch->u.tcp.islisten = 1;
-    if ((ret = nt_socket_listen(ip, 0, 1, &ch->proxyaddr)) < 0)
-    {
-        return ret;
-    }
-    ch->inbound.event.data.fd = ret;
-
+    int ret;
     if ((ret = nt_socket_connect(SOCK_STREAM, &socks5->server_addr, 1)) < 0)
     {
-        goto ERR_BIND;
+        return ret;
     }
     ch->outbound.event.data.fd = ret;
 
     return 0;
-
-ERR_BIND:
-    close(ch->inbound.event.data.fd);
-    return ret;
 }
 
 static void s_socks5_weakup(nt_proxy_socks5_t* socks5)
@@ -1267,33 +1191,19 @@ static void s_socks5_weakup(nt_proxy_socks5_t* socks5)
 static int s_socks5_channel_udp_make(nt_proxy_socks5_t* socks5, socks5_channel_t* ch)
 {
     int ret;
-    ch->u.udp.associate_fd = -1;
-
-    /* For inbound we bind a random address to loopback UDP socket. */
-    int         family = ch->peeraddr.ss_family;
-    const char* ip = (family == AF_INET) ? "127.0.0.1" : "::1";
-    if ((ret = nt_socket_bind(SOCK_DGRAM, ip, 0, 1, &ch->proxyaddr)) < 0)
-    {
-        return ret;
-    }
-    ch->inbound.event.data.fd = ret;
 
     /* Out bound is a TCP socket for handshake. The actual UDP data channel will create later. */
     if ((ret = nt_socket_connect(SOCK_STREAM, &socks5->server_addr, 1)) < 0)
     {
-        goto ERR_INBOUND_BIND;
+        return ret;
     }
     ch->outbound.event.data.fd = ret;
 
     return 0;
-
-ERR_INBOUND_BIND:
-    close(ch->inbound.event.data.fd);
-    return ret;
 }
 
-static int s_socks5_channel_create(struct nt_proxy* thiz, int type, const struct sockaddr* peeraddr,
-                                   struct sockaddr_storage* proxyaddr)
+static int s_socks5_channel_create(struct nt_proxy* thiz, int type, int sv,
+                                   const struct sockaddr* peeraddr)
 {
     int ret;
 
@@ -1308,8 +1218,10 @@ static int s_socks5_channel_create(struct nt_proxy* thiz, int type, const struct
     socks5_channel_t*  ch = nt_malloc(sizeof(socks5_channel_t));
     ch->socks5 = socks5;
     ch->type = type;
+    ch->inbound.event.data.fd = dup(sv);
     ch->inbound.event.events = 0;
     ch->inbound.channel = ch;
+    ch->outbound.event.data.fd = -1;
     ch->outbound.event.events = 0;
     ch->outbound.channel = ch;
     ch->stage = SOCKS5_INIT;
@@ -1325,7 +1237,6 @@ static int s_socks5_channel_create(struct nt_proxy* thiz, int type, const struct
         nt_free(ch);
         return ret;
     }
-    nt_sockaddr_copy((struct sockaddr*)proxyaddr, (struct sockaddr*)&ch->proxyaddr);
 
     socks5_action_t* act = nt_malloc(sizeof(socks5_action_t));
     act->type = SOCKS5_ACTION_CREATE_CHANNEL;

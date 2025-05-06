@@ -302,8 +302,8 @@ static void s_trace_syscall_connect_enter(prog_node_t* prog)
     LOG_I("[PID=%d] Redirect %s://%s:%d", prog->si.pid, sock_type_name, peer_ip, peer_port);
 
     /* Create proxy channel. */
-    sock->channel = G->proxy->channel_create(G->proxy, sock->type,
-                                             (struct sockaddr*)&sock->peer_addr, &sock->proxy_addr);
+    sock->channel = nt_chain_new(G->chain, sock->type, (struct sockaddr*)&sock->peer_addr,
+                                 &sock->proxy_addr, G->proxy);
     if (sock->channel < 0)
     {
         return;
@@ -672,14 +672,13 @@ static int s_setup_dns_proxy(url_comp_t* url)
         return ret;
     }
 
-    ret = G->proxy->channel_create(G->proxy, SOCK_DGRAM, (struct sockaddr*)&peer_addr,
-                                   &config.peer_addr);
-    if (ret < 0)
+    G->dns_chid = nt_chain_new(G->chain, SOCK_DGRAM, (struct sockaddr*)&peer_addr,
+                               &config.peer_addr, G->proxy);
+    if (G->dns_chid < 0)
     {
         LOG_E("Create DNS proxy channel failed.");
         return ret;
     }
-    G->dns_chid = ret;
 
     return nt_dns_proxy_create(&G->dns, &config);
 }
@@ -709,6 +708,8 @@ static void nt_runtime_init(const nt_cmd_opt_t* opt, pid_t pid)
         }
         LOG_D("Create proxy to `%s`.", opt->proxy);
     }
+
+    nt_chain_init(&G->chain);
 
     if (G->proxy != NULL && opt->dns != NULL)
     {
@@ -754,6 +755,12 @@ static void nt_runtime_cleanup(void)
     if (G == NULL)
     {
         return;
+    }
+
+    if (G->chain != NULL)
+    {
+        nt_chain_exit(G->chain);
+        G->chain = NULL;
     }
 
     if (G->dns != NULL)

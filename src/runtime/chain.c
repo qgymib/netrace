@@ -730,6 +730,9 @@ static int s_chain_new_by_type(nt_chain_node_t* node, int type)
     {
         return NT_ERR(errno);
     }
+    nt_nonblock(node->sv[0], 1);
+    nt_nonblock(node->sv[1], 1);
+
     node->outbound.event.data.fd = node->sv[0];
     node->sv[0] = -1;
 

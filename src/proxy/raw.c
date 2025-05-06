@@ -25,14 +25,12 @@ typedef struct proxy_raw_channel
     ev_map_node_t node;
     int           chid; /* Channel ID. */
     int           type; /* SOCK_STREAM / SOCK_DGRAM */
-    int           islisten;
     raw_sock_t    inbound;
     raw_sock_t    outbound;
     size_t        ubuf_sz;
     size_t        dbuf_sz;
     uint8_t       ubuf[NT_SOCKET_BUFFER_SIZE]; /* Upload buffer. From inbound to outbound. */
     uint8_t       dbuf[NT_SOCKET_BUFFER_SIZE]; /* Download buffer. From outbound to inbound. */
-    struct sockaddr_storage localaddr;
     struct sockaddr_storage peeraddr;
 } proxy_raw_channel_t;
 
@@ -191,38 +189,25 @@ static void s_proxy_raw_weakup(nt_proxy_raw_t* raw)
 
 static int s_proxy_new_channel_tcp(proxy_raw_channel_t* ch)
 {
-    int         ret = 0;
-    const char* ip = ch->peeraddr.ss_family == AF_INET ? "127.0.0.1" : "::1";
-
-    ch->islisten = 1;
-    if ((ret = nt_socket_listen(ip, 0, 1, &ch->localaddr)) < 0)
+    int ret = 0;
+    if ((ret = nt_socket_connect(SOCK_STREAM, &ch->peeraddr, 1)) < 0)
     {
         return ret;
     }
-    ch->inbound.event.data.fd = ret;
-
-    if ((ret = nt_socket_connect(SOCK_STREAM, &ch->peeraddr, 1)) < 0)
-    {
-        goto ERR_BIND;
-    }
     ch->outbound.event.data.fd = ret;
-
     return 0;
-
-ERR_BIND:
-    close(ch->inbound.event.data.fd);
-    return ret;
 }
 
-static int s_proxy_raw_channel_create(struct nt_proxy* thiz, int type,
-                                      const struct sockaddr*   peeraddr,
-                                      struct sockaddr_storage* proxyaddr)
+static int s_proxy_raw_channel_create(struct nt_proxy* thiz, int type, int sv,
+                                      const struct sockaddr* peeraddr)
 {
     nt_proxy_raw_t*      raw = container_of(thiz, nt_proxy_raw_t, basis);
     proxy_raw_channel_t* ch = nt_malloc(sizeof(proxy_raw_channel_t));
     ch->type = type;
+    ch->inbound.event.data.fd = dup(sv);
     ch->inbound.event.events = 0;
     ch->inbound.channel = ch;
+    ch->outbound.event.data.fd = -1;
     ch->outbound.event.events = 0;
     ch->outbound.channel = ch;
     ch->ubuf_sz = 0;
@@ -232,10 +217,10 @@ static int s_proxy_raw_channel_create(struct nt_proxy* thiz, int type,
     int ret = (type == SOCK_STREAM) ? s_proxy_new_channel_tcp(ch) : NT_ERR(ENOTSUP);
     if (ret < 0)
     {
+        close(ch->inbound.event.data.fd);
         nt_free(ch);
         return ret;
     }
-    nt_sockaddr_copy((struct sockaddr*)proxyaddr, (struct sockaddr*)&ch->localaddr);
 
     proxy_raw_action_t* act = nt_malloc(sizeof(proxy_raw_action_t));
     act->type = RAW_CHANNEL_CREATE;
@@ -427,23 +412,6 @@ static void s_proxy_raw_handle_inbound_w(nt_proxy_raw_t* raw, proxy_raw_channel_
     }
 }
 
-static void s_proxy_raw_handle_inbound_tcp_listen(nt_proxy_raw_t* raw, proxy_raw_channel_t* ch)
-{
-    /* Accept connection and close listen fd. */
-    int fd = nt_accept(ch->inbound.event.data.fd);
-    if (fd < 0)
-    {
-        s_proxy_raw_close_inbound_outbound_channel(raw, ch);
-        return;
-    }
-    s_proxy_raw_close_inbound_channel(raw, ch);
-
-    /* Register read. */
-    ch->inbound.event.data.fd = fd;
-    ev_map_insert(&raw->sock_map, &ch->inbound.node);
-    s_raw_inbound_want_read(raw, ch);
-}
-
 static void s_proxy_raw_handle_inbound_tcp_r(nt_proxy_raw_t* raw, proxy_raw_channel_t* ch)
 {
     int ret;
@@ -479,19 +447,6 @@ static void s_proxy_raw_handle_inbound_tcp_r(nt_proxy_raw_t* raw, proxy_raw_chan
     {
         s_raw_inbound_stop_read(raw, ch);
     }
-}
-
-static void s_proxy_raw_handle_inbound_r(nt_proxy_raw_t* raw, proxy_raw_channel_t* ch)
-{
-    if (ch->islisten)
-    {
-        s_proxy_raw_handle_inbound_tcp_listen(raw, ch);
-        /* Cancel listen flag. */
-        ch->islisten = 0;
-        return;
-    }
-
-    s_proxy_raw_handle_inbound_tcp_r(raw, ch);
 }
 
 static void s_proxy_raw_handle_outbound_w(nt_proxy_raw_t* raw, proxy_raw_channel_t* ch)
@@ -567,7 +522,7 @@ static void s_proxy_raw_handle_channel(nt_proxy_raw_t* raw, proxy_raw_channel_t*
         }
         if (event->events & EPOLLIN)
         {
-            s_proxy_raw_handle_inbound_r(raw, ch);
+            s_proxy_raw_handle_inbound_tcp_r(raw, ch);
         }
     }
     else if (ch->outbound.event.data.fd == event->data.fd)
