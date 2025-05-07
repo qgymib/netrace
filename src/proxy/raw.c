@@ -181,7 +181,7 @@ static void s_proxy_raw_release(struct nt_proxy* thiz)
     nt_free(raw);
 }
 
-static void s_proxy_raw_weakup(nt_proxy_raw_t* raw)
+static void s_proxy_raw_wakeup(nt_proxy_raw_t* raw)
 {
     uint64_t buff = 1;
     write(raw->eventfd, &buff, sizeof(buff));
@@ -235,7 +235,7 @@ static int s_proxy_raw_channel_create(struct nt_proxy* thiz, int type, int sv,
     }
     pthread_mutex_unlock(&raw->actq_mutex);
 
-    s_proxy_raw_weakup(raw);
+    s_proxy_raw_wakeup(raw);
     return chid;
 }
 
@@ -638,7 +638,7 @@ static void s_proxy_raw_channel_release(struct nt_proxy* thiz, int channel)
     ev_list_push_back(&raw->actq, &act->node);
     pthread_mutex_unlock(&raw->actq_mutex);
 
-    s_proxy_raw_weakup(raw);
+    s_proxy_raw_wakeup(raw);
 }
 
 static int s_proxy_raw_make(nt_proxy_t** proxy, const url_comp_t* url)

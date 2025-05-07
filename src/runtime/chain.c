@@ -766,7 +766,7 @@ static int s_chain_new_by_type(nt_chain_node_t* node, int type)
     return ret;
 }
 
-static void s_chain_weakup(nt_chain_t* chain)
+static void s_chain_wakeup(nt_chain_t* chain)
 {
     uint64_t buff = 1;
     write(chain->eventfd, &buff, sizeof(buff));
@@ -861,7 +861,7 @@ int nt_chain_new(nt_chain_t* chain, int type, const struct sockaddr* peeraddr,
     }
     pthread_mutex_unlock(&chain->actq_mutex);
 
-    s_chain_weakup(chain);
+    s_chain_wakeup(chain);
     return chid;
 }
 
