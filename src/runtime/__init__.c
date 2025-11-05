@@ -13,7 +13,6 @@
 #include "trace/__init__.h"
 #include "utils/defs.h"
 #include "utils/log.h"
-#include "utils/memory.h"
 #include "utils/str.h"
 #include "utils/urlparser.h"
 #include "utils/socket.h"
@@ -178,7 +177,7 @@ static void s_check_child_exit_reason(int prog_pipe[2])
 
 static void s_trace_syscall_socket_enter(prog_node_t* prog)
 {
-    sock_node_t* sock = nt_calloc(1, sizeof(sock_node_t));
+    sock_node_t* sock = calloc(1, sizeof(sock_node_t));
     sock->fd = -1;
     sock->channel = -1;
     sock->domain = prog->si.enter.entry.args[0];
@@ -204,7 +203,7 @@ static void nt_sock_node_release(sock_node_t* sock)
         G->proxy->channel_release(G->proxy, sock->channel);
         sock->channel = -1;
     }
-    nt_free(sock);
+    free(sock);
 }
 
 static void s_trace_syscall_socket_leave(prog_node_t* prog)
@@ -440,7 +439,7 @@ static int s_on_cmp_sock(const ev_map_node_t* key1, const ev_map_node_t* key2, v
 
 static prog_node_t* s_prog_node_save(pid_t pid)
 {
-    prog_node_t* info = nt_calloc(1, sizeof(prog_node_t));
+    prog_node_t* info = calloc(1, sizeof(prog_node_t));
     info->si.pid = pid;
     ev_map_init(&info->sock_map, s_on_cmp_sock, NULL);
 
@@ -465,7 +464,7 @@ static void nt_prog_node_release(prog_node_t* node)
         nt_sock_node_release(sock);
     }
 
-    nt_free(node);
+    free(node);
 }
 
 static void do_trace(const nt_cmd_opt_t* opt, int prog_pipe[2])
@@ -644,7 +643,7 @@ static int s_setup_ipfilter(const nt_cmd_opt_t* opt)
     G->ipfilter = nt_ipfilter_create();
 
     char* saveptr;
-    char* rule = nt_strdup(bypass);
+    char* rule = strdup(bypass);
     char* s = rule;
     char* p;
     while ((p = strtok_r(s, ",", &saveptr)) != NULL)
@@ -655,7 +654,7 @@ static int s_setup_ipfilter(const nt_cmd_opt_t* opt)
             break;
         }
     }
-    nt_free(rule);
+    free(rule);
 
     return ret;
 }
@@ -732,7 +731,7 @@ finish:
 static void nt_runtime_init(const nt_cmd_opt_t* opt, pid_t pid)
 {
     int ret;
-    G = nt_calloc(1, sizeof(*G));
+    G = calloc(1, sizeof(*G));
     G->prog_pid = pid;
     ev_map_init(&G->prog_map, s_on_cmp_prog, NULL);
     if ((ret = s_setup_ipfilter(opt)) != 0)
@@ -819,7 +818,7 @@ static void nt_runtime_cleanup(void)
         G->ipfilter = NULL;
     }
 
-    nt_free(G);
+    free(G);
     G = NULL;
 }
 

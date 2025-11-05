@@ -5,7 +5,6 @@
 #include <sys/eventfd.h>
 #include <sys/epoll.h>
 #include "utils/defs.h"
-#include "utils/memory.h"
 #include "utils/list.h"
 #include "utils/socket.h"
 #include "utils/log.h"
@@ -115,7 +114,7 @@ static void s_proxy_raw_close_inbound_outbound_channel(nt_proxy_raw_t* raw, prox
 static void s_proxy_raw_release_channel(nt_proxy_raw_t* raw, proxy_raw_channel_t* ch)
 {
     s_proxy_raw_close_inbound_outbound_channel(raw, ch);
-    nt_free(ch);
+    free(ch);
 }
 
 static void s_proxy_raw_cleanup_actq(nt_proxy_raw_t* raw)
@@ -137,7 +136,7 @@ static void s_proxy_raw_cleanup_actq(nt_proxy_raw_t* raw)
             }
             ev_map_insert(&raw->channel_map, &ch->node);
         }
-        nt_free(act);
+        free(act);
     }
 }
 
@@ -179,7 +178,7 @@ static void s_proxy_raw_release(struct nt_proxy* thiz)
         close(raw->eventfd);
         raw->eventfd = -1;
     }
-    nt_free(raw);
+    free(raw);
 }
 
 static void s_proxy_raw_weakup(nt_proxy_raw_t* raw)
@@ -218,7 +217,7 @@ static int s_proxy_raw_channel_create(struct nt_proxy* thiz, int type,
                                       struct sockaddr_storage* proxyaddr)
 {
     nt_proxy_raw_t*      raw = container_of(thiz, nt_proxy_raw_t, basis);
-    proxy_raw_channel_t* ch = nt_malloc(sizeof(proxy_raw_channel_t));
+    proxy_raw_channel_t* ch = malloc(sizeof(proxy_raw_channel_t));
     ch->type = type;
     ch->inbound.event.events = 0;
     ch->inbound.channel = ch;
@@ -231,12 +230,12 @@ static int s_proxy_raw_channel_create(struct nt_proxy* thiz, int type,
     int ret = (type == SOCK_STREAM) ? s_proxy_new_channel_tcp(ch) : NT_ERR(ENOTSUP);
     if (ret < 0)
     {
-        nt_free(ch);
+        free(ch);
         return ret;
     }
     nt_sockaddr_copy((struct sockaddr*)proxyaddr, (struct sockaddr*)&ch->localaddr);
 
-    proxy_raw_action_t* act = nt_malloc(sizeof(proxy_raw_action_t));
+    proxy_raw_action_t* act = malloc(sizeof(proxy_raw_action_t));
     act->type = RAW_CHANNEL_CREATE;
     act->data.channel = ch;
 
@@ -384,7 +383,7 @@ static void s_proxy_raw_handle_event(nt_proxy_raw_t* raw)
             break;
         }
 
-        nt_free(act);
+        free(act);
     }
 }
 
@@ -663,7 +662,7 @@ static int s_proxy_raw_on_cmp_channel(const ev_map_node_t* key1, const ev_map_no
 static void s_proxy_raw_channel_release(struct nt_proxy* thiz, int channel)
 {
     nt_proxy_raw_t*     raw = container_of(thiz, nt_proxy_raw_t, basis);
-    proxy_raw_action_t* act = nt_malloc(sizeof(proxy_raw_action_t));
+    proxy_raw_action_t* act = malloc(sizeof(proxy_raw_action_t));
     act->type = RAW_CHANNEL_RELEASE;
     act->data.chid = channel;
 
@@ -679,7 +678,7 @@ static int s_proxy_raw_make(nt_proxy_t** proxy, const url_comp_t* url)
     (void)url;
 
     int             retval = 0;
-    nt_proxy_raw_t* raw = nt_calloc(1, sizeof(nt_proxy_raw_t));
+    nt_proxy_raw_t* raw = calloc(1, sizeof(nt_proxy_raw_t));
     raw->basis.release = s_proxy_raw_release;
     raw->basis.channel_create = s_proxy_raw_channel_create;
     raw->basis.channel_release = s_proxy_raw_channel_release;

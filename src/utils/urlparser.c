@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <string.h>
 #include "utils/defs.h"
-#include "utils/memory.h"
 #include "utils/log.h"
 #include "utils/str.h"
 #include "urlparser.h"
@@ -16,7 +15,7 @@ static int s_url_parse_scheme(url_comp_t* comp, const char** url)
         return NT_ERR(EINVAL);
     }
 
-    comp->scheme = nt_strndup(*url, scheme_eol - *url);
+    comp->scheme = strndup(*url, scheme_eol - *url);
     *url = scheme_eol + 3;
     return 0;
 }
@@ -40,12 +39,12 @@ static int s_url_parse_authority(url_comp_t* comp, const char** url)
         const char* user_eol = memmem(*url, userpass_len, ":", 1);
         if (user_eol != NULL)
         {
-            comp->username = nt_strndup(*url, user_eol - *url);
-            comp->password = nt_strndup(user_eol + 1, userpass_eol - user_eol - 1);
+            comp->username = strndup(*url, user_eol - *url);
+            comp->password = strndup(user_eol + 1, userpass_eol - user_eol - 1);
         }
         else
         {
-            comp->username = nt_strndup(*url, userpass_len);
+            comp->username = strndup(*url, userpass_len);
         }
 
         url_len -= userpass_eol - *url + 1;
@@ -63,15 +62,15 @@ static int s_url_parse_authority(url_comp_t* comp, const char** url)
         }
         if (addr_eol[-1] == ':')
         { /* This is IPv6 address. */
-            comp->host = nt_strndup(*url, url_len);
+            comp->host = strndup(*url, url_len);
         }
         else
         { /* This is IPv4 address. */
-            comp->host = nt_strndup(*url, addr_eol - *url);
-            comp->port = nt_malloc(sizeof(*comp->port));
-            char* s_port = nt_strndup(addr_eol + 1, url_len - (addr_eol - *url) - 1);
+            comp->host = strndup(*url, addr_eol - *url);
+            comp->port = malloc(sizeof(*comp->port));
+            char* s_port = strndup(addr_eol + 1, url_len - (addr_eol - *url) - 1);
             int   scan_ret = sscanf(s_port, "%u", comp->port);
-            nt_free(s_port);
+            free(s_port);
             if (scan_ret != 1)
             {
                 *url = addr_eol + 1;
@@ -81,7 +80,7 @@ static int s_url_parse_authority(url_comp_t* comp, const char** url)
     }
     else
     {
-        comp->host = nt_strndup(*url, url_len);
+        comp->host = strndup(*url, url_len);
     }
 
     *url += (authority_eol != NULL) ? (url_len + 1) : url_len;
@@ -98,7 +97,7 @@ static int s_url_parse_path(url_comp_t* comp, const char** url)
     const char* pos = strpbrk(*url, "#?");
     if (pos == NULL)
     {
-        comp->path = nt_strdup(*url);
+        comp->path = strdup(*url);
         *url += strlen(*url);
         return 0;
     }
@@ -109,7 +108,7 @@ static int s_url_parse_path(url_comp_t* comp, const char** url)
     }
 
     size_t path_len = pos - *url;
-    comp->path = nt_strndup(*url, path_len);
+    comp->path = strndup(*url, path_len);
     *url += path_len;
 
     return 0;
@@ -128,9 +127,9 @@ static void s_url_parse_query_value(url_query_t* q)
 static void s_url_append_query(url_comp_t* comp, const char* data, size_t size)
 {
     comp->query_sz++;
-    comp->query = nt_realloc(comp->query, sizeof(*comp->query) * comp->query_sz);
+    comp->query = realloc(comp->query, sizeof(*comp->query) * comp->query_sz);
     url_query_t* q = &comp->query[comp->query_sz - 1];
-    q->k = nt_strndup(data, size);
+    q->k = strndup(data, size);
     q->v = NULL;
     s_url_parse_query_value(q);
 }
@@ -191,7 +190,7 @@ int nt_url_comp_parser(url_comp_t** components, const char* url)
 {
     int               ret = 0;
     const char*       dup_url = url;
-    url_comp_t* comp = nt_calloc(1, sizeof(url_comp_t));
+    url_comp_t* comp = calloc(1, sizeof(url_comp_t));
     if ((ret = s_url_parse_scheme(comp, &url)) != 0)
     {
         goto ERR;
@@ -222,32 +221,32 @@ void nt_url_comp_free(url_comp_t* comp)
 {
     if (comp->scheme != NULL)
     {
-        nt_free(comp->scheme);
+        free(comp->scheme);
         comp->scheme = NULL;
     }
     if (comp->username != NULL)
     {
-        nt_free(comp->username);
+        free(comp->username);
         comp->username = NULL;
     }
     if (comp->password != NULL)
     {
-        nt_free(comp->password);
+        free(comp->password);
         comp->password = NULL;
     }
     if (comp->host != NULL)
     {
-        nt_free(comp->host);
+        free(comp->host);
         comp->host = NULL;
     }
     if (comp->port != NULL)
     {
-        nt_free(comp->port);
+        free(comp->port);
         comp->port = NULL;
     }
     if (comp->path != NULL)
     {
-        nt_free(comp->path);
+        free(comp->path);
         comp->path = NULL;
     }
     if (comp->query != NULL)
@@ -255,12 +254,12 @@ void nt_url_comp_free(url_comp_t* comp)
         size_t i;
         for (i = 0; i < comp->query_sz; i++)
         {
-            nt_free(comp->query[i].k);
+            free(comp->query[i].k);
             /* No need to free v, it just point to subrange of k. */
         }
-        nt_free(comp->query);
+        free(comp->query);
     }
-    nt_free(comp);
+    free(comp);
 }
 
 const char* nt_url_comp_query(const url_comp_t* comp, const char* k)

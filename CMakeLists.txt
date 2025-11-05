@@ -81,7 +81,6 @@ add_library(lib${PROJECT_NAME} STATIC
     "src/utils/list.c"
     "src/utils/log.c"
     "src/utils/map.c"
-    "src/utils/memory.c"
     "src/utils/random.c"
     "src/utils/socket.c"
     "src/utils/str.c"

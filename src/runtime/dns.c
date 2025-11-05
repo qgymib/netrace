@@ -6,7 +6,6 @@
 #include "utils/defs.h"
 #include "utils/dns.h"
 #include "utils/map.h"
-#include "utils/memory.h"
 #include "utils/socket.h"
 #include "utils/str.h"
 #include "utils/time.h"
@@ -35,7 +34,7 @@ struct nt_dns_proxy
 
 static void s_dns_release_in_record(dns_in_record* record)
 {
-    nt_free(record);
+    free(record);
 }
 
 static int s_dns_handle_input(nt_dns_proxy_t* proxy, size_t bufsz, nt_dns_msg_t* msg,
@@ -55,7 +54,7 @@ static int s_dns_handle_input(nt_dns_proxy_t* proxy, size_t bufsz, nt_dns_msg_t*
     }
 
     /* Build query record. */
-    dns_in_record* rec = nt_calloc(1, sizeof(dns_in_record));
+    dns_in_record* rec = calloc(1, sizeof(dns_in_record));
     rec->id = msg->header.id;
     rec->start_ts = nt_clock_gettime_ms();
     memcpy(&rec->peer_addr, peer_addr, sizeof(*peer_addr));
@@ -64,7 +63,7 @@ static int s_dns_handle_input(nt_dns_proxy_t* proxy, size_t bufsz, nt_dns_msg_t*
     if (ev_map_insert(&proxy->in_table, &rec->node) != NULL)
     {
         LOG_D("Ignore duplicate DNS query id=%u", rec->id);
-        nt_free(rec);
+        free(rec);
     }
 
     return 0;
@@ -198,7 +197,7 @@ static void s_dns_cleanup_in(nt_dns_proxy_t* proxy)
 int nt_dns_proxy_create(nt_dns_proxy_t** proxy, const nt_dns_proxy_config_t* config)
 {
     int             ret;
-    nt_dns_proxy_t* p = nt_malloc(sizeof(nt_dns_proxy_t));
+    nt_dns_proxy_t* p = malloc(sizeof(nt_dns_proxy_t));
     memcpy(&p->config, config, sizeof(*config));
     ev_map_init(&p->in_table, s_dns_cmp_in_record, NULL);
 
@@ -228,7 +227,7 @@ ERR_PTHREAD_CREATE:
 ERR_CLIENT:
     close(p->server_fd);
 ERR_BIND:
-    nt_free(p);
+    free(p);
     return ret;
 }
 
@@ -242,7 +241,7 @@ void nt_dns_proxy_destroy(nt_dns_proxy_t* proxy)
     close(proxy->server_fd);
     proxy->server_fd = -1;
 
-    nt_free(proxy);
+    free(proxy);
 }
 
 void nt_dns_proxy_local_addr(const nt_dns_proxy_t* proxy, struct sockaddr_storage* addr)

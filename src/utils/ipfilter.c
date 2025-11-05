@@ -1,7 +1,6 @@
 #include <arpa/inet.h>
 #include <string.h>
 #include "utils/defs.h"
-#include "utils/memory.h"
 #include "utils/socket.h"
 #include "utils/log.h"
 #include "ipfilter.h"
@@ -21,15 +20,15 @@ struct nt_ipfilter
 
 nt_ipfilter_t* nt_ipfilter_create()
 {
-    return nt_calloc(1, sizeof(nt_ipfilter_rule_t));
+    return calloc(1, sizeof(nt_ipfilter_rule_t));
 }
 
 void nt_ipfilter_destroy(nt_ipfilter_t* filter)
 {
-    nt_free(filter->rules);
+    free(filter->rules);
     filter->rules = NULL;
     filter->rule_sz = 0;
-    nt_free(filter);
+    free(filter);
 }
 
 static int s_ipfilter_add_ipv4(nt_ipfilter_rule_t* rule, unsigned mask)
@@ -81,7 +80,7 @@ static int s_ipfilter_add_ipv6(nt_ipfilter_rule_t* rule, unsigned mask)
 int nt_ipfiter_add(nt_ipfilter_t* filter, int type, const char* ip, unsigned mask, int port)
 {
     filter->rule_sz++;
-    filter->rules = nt_realloc(filter->rules, sizeof(nt_ipfilter_rule_t) * filter->rule_sz);
+    filter->rules = realloc(filter->rules, sizeof(nt_ipfilter_rule_t) * filter->rule_sz);
 
     nt_ipfilter_rule_t* rule = &filter->rules[filter->rule_sz - 1];
     memset(rule, 0, sizeof(*rule));

@@ -3,7 +3,6 @@
 #include <arpa/inet.h>
 #include "utils/defs.h"
 #include "utils/log.h"
-#include "utils/memory.h"
 #include "utils/random.h"
 #include "dns.h"
 
@@ -24,7 +23,7 @@ static void s_dns_msg_free_question(nt_dns_msg_t* msg)
         nt_dns_question_t* q = &msg->questions[i];
         c_str_free(q->qname);
     }
-    nt_free(msg->questions);
+    free(msg->questions);
 }
 
 static void s_dns_msg_free_resource(nt_dns_resource_t* resource, size_t n)
@@ -34,9 +33,9 @@ static void s_dns_msg_free_resource(nt_dns_resource_t* resource, size_t n)
     {
         nt_dns_resource_t* r = &resource[i];
         c_str_free(r->name);
-        nt_free(r->rdata);
+        free(r->rdata);
     }
-    nt_free(resource);
+    free(resource);
 }
 
 static int s_dns_is_pointer(uint8_t u8)
@@ -158,7 +157,7 @@ static int s_dns_parse_question(nt_dns_msg_t* pkg, const uint8_t* data, size_t s
     size_t i;
     size_t offset = pos;
 
-    pkg->questions = nt_calloc(pkg->header.qdcount, sizeof(nt_dns_question_t));
+    pkg->questions = calloc(pkg->header.qdcount, sizeof(nt_dns_question_t));
     for (i = 0; i < pkg->header.qdcount; i++)
     {
         nt_dns_question_t* q = &pkg->questions[i];
@@ -189,7 +188,7 @@ static int s_dns_parse_resource(nt_dns_resource_t** dst, size_t n, const uint8_t
     {
         return 0;
     }
-    *dst = nt_calloc(n, sizeof(nt_dns_resource_t));
+    *dst = calloc(n, sizeof(nt_dns_resource_t));
 
     size_t i, offset = pos;
     for (i = 0; i < n; i++)
@@ -229,7 +228,7 @@ static int s_dns_parse_resource(nt_dns_resource_t** dst, size_t n, const uint8_t
             return NT_ERR(EINVAL);
         }
 
-        r->rdata = nt_malloc(r->rdlength);
+        r->rdata = malloc(r->rdlength);
         memcpy(r->rdata, &data[offset], r->rdlength);
         offset += r->rdlength;
     }
@@ -324,7 +323,7 @@ static int s_dns_build_resource(uint8_t* buff, size_t size, const nt_dns_resourc
 static nt_dns_question_t* s_dns_copy_question(const nt_dns_question_t* req, size_t n)
 {
     size_t             i;
-    nt_dns_question_t* new_req = nt_calloc(n, sizeof(*req));
+    nt_dns_question_t* new_req = calloc(n, sizeof(*req));
 
     for (i = 0; i < n; i++)
     {
@@ -340,7 +339,7 @@ static nt_dns_question_t* s_dns_copy_question(const nt_dns_question_t* req, size
 static nt_dns_resource_t* s_dns_copy_resource(const nt_dns_resource_t* res, size_t n)
 {
     size_t             i;
-    nt_dns_resource_t* new_res = nt_calloc(n, sizeof(*res));
+    nt_dns_resource_t* new_res = calloc(n, sizeof(*res));
 
     for (i = 0; i < n; i++)
     {
@@ -350,7 +349,7 @@ static nt_dns_resource_t* s_dns_copy_resource(const nt_dns_resource_t* res, size
         new_res[i].class = r->class;
         new_res[i].ttl = r->ttl;
         new_res[i].rdlength = r->rdlength;
-        new_res[i].rdata = nt_malloc(r->rdlength);
+        new_res[i].rdata = malloc(r->rdlength);
         memcpy(new_res[i].rdata, r->rdata, r->rdlength);
     }
 
@@ -366,7 +365,7 @@ int nt_dns_msg_parser(nt_dns_msg_t** msg, const void* data, size_t size)
         return NT_ERR(EINVAL);
     }
 
-    nt_dns_msg_t* pkg = nt_calloc(1, sizeof(nt_dns_msg_t));
+    nt_dns_msg_t* pkg = calloc(1, sizeof(nt_dns_msg_t));
     pkg->header.id = s_dns_get_u16(&ptr[0]);
 
     uint16_t fields = s_dns_get_u16(&ptr[2]);
@@ -423,7 +422,7 @@ void nt_dns_msg_free(nt_dns_msg_t* msg)
     s_dns_msg_free_resource(msg->answer, msg->header.ancount);
     s_dns_msg_free_resource(msg->authority, msg->header.nscount);
     s_dns_msg_free_resource(msg->additional, msg->header.arcount);
-    nt_free(msg);
+    free(msg);
 }
 
 int nt_dns_msg_build(const nt_dns_msg_t* msg, void* buff, size_t size)
@@ -490,7 +489,7 @@ int nt_dns_msg_build(const nt_dns_msg_t* msg, void* buff, size_t size)
 
 nt_dns_msg_t* nt_dns_msg_copy(const nt_dns_msg_t* msg)
 {
-    nt_dns_msg_t* pkg = nt_calloc(1, sizeof(nt_dns_msg_t));
+    nt_dns_msg_t* pkg = calloc(1, sizeof(nt_dns_msg_t));
     memcpy(&pkg->header, &msg->header, sizeof(msg->header));
     pkg->questions = s_dns_copy_question(msg->questions, msg->header.qdcount);
     pkg->answer = s_dns_copy_resource(msg->answer, msg->header.ancount);

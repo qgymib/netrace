@@ -11,7 +11,6 @@
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
 #include "utils/defs.h"
-#include "utils/memory.h"
 #include "utils/list.h"
 #include "utils/socket.h"
 #include "utils/log.h"
@@ -130,17 +129,17 @@ static void s_socks5_release_server_info(nt_proxy_socks5_t* socks5)
 {
     if (socks5->server_username != NULL)
     {
-        nt_free(socks5->server_username);
+        free(socks5->server_username);
         socks5->server_username = NULL;
     }
     if (socks5->server_password != NULL)
     {
-        nt_free(socks5->server_password);
+        free(socks5->server_password);
         socks5->server_password = NULL;
     }
     if (socks5->server_ip != NULL)
     {
-        nt_free(socks5->server_ip);
+        free(socks5->server_ip);
         socks5->server_ip = NULL;
     }
 }
@@ -196,7 +195,7 @@ static void s_socks5_close_inbound_outbound(nt_proxy_socks5_t* socks5, socks5_ch
 static void s_socks5_release_channel(nt_proxy_socks5_t* socks5, socks5_channel_t* channel)
 {
     s_socks5_close_inbound_outbound(socks5, channel);
-    nt_free(channel);
+    free(channel);
 }
 
 static void s_socks5_channel_remove_and_release(nt_proxy_socks5_t* socks5,
@@ -225,7 +224,7 @@ static void s_socks5_cleanup_actq(nt_proxy_socks5_t* socks5)
             }
             ev_map_insert(&socks5->channel_map, &ch->node);
         }
-        nt_free(act);
+        free(act);
     }
 }
 
@@ -261,7 +260,7 @@ static void s_nt_proxy_socks5_release(struct nt_proxy* thiz)
     }
     pthread_mutex_destroy(&socks5->actq_mutex);
     s_socks5_release_server_info(socks5);
-    nt_free(socks5);
+    free(socks5);
 }
 
 /**
@@ -273,11 +272,11 @@ static int s_socks5_url_parser(nt_proxy_socks5_t* socks5, const url_comp_t* url)
 {
     if (url->host == NULL)
     {
-        socks5->server_ip = nt_strdup(NT_DEFAULT_SOCKS5_ADDR);
+        socks5->server_ip = strdup(NT_DEFAULT_SOCKS5_ADDR);
     }
     else
     {
-        socks5->server_ip = nt_strdup(url->host);
+        socks5->server_ip = strdup(url->host);
     }
 
     if (url->port != NULL)
@@ -291,13 +290,13 @@ static int s_socks5_url_parser(nt_proxy_socks5_t* socks5, const url_comp_t* url)
 
     if (url->username != NULL)
     {
-        socks5->server_username = nt_strdup(url->username);
+        socks5->server_username = strdup(url->username);
         socks5->server_username_sz = strlen(socks5->server_username);
     }
 
     if (url->password != NULL)
     {
-        socks5->server_password = nt_strdup(url->password);
+        socks5->server_password = strdup(url->password);
         socks5->server_password_sz = strlen(socks5->server_password);
     }
 
@@ -315,8 +314,8 @@ static int s_socks5_url_parser(nt_proxy_socks5_t* socks5, const url_comp_t* url)
     return 0;
 
 ERR_INVAL:
-    nt_free(socks5->server_username);
-    nt_free(socks5->server_password);
+    free(socks5->server_username);
+    free(socks5->server_password);
     return NT_ERR(EINVAL);
 }
 
@@ -1149,7 +1148,7 @@ static void s_socks5_handle_event(nt_proxy_socks5_t* socks5)
             break;
         }
 
-        nt_free(act);
+        free(act);
     }
 }
 
@@ -1291,7 +1290,7 @@ static int s_socks5_channel_create(struct nt_proxy* thiz, int type, const struct
     }
 
     nt_proxy_socks5_t* socks5 = container_of(thiz, nt_proxy_socks5_t, basis);
-    socks5_channel_t*  ch = nt_malloc(sizeof(socks5_channel_t));
+    socks5_channel_t*  ch = malloc(sizeof(socks5_channel_t));
     ch->socks5 = socks5;
     ch->type = type;
     ch->inbound.event.events = 0;
@@ -1308,12 +1307,12 @@ static int s_socks5_channel_create(struct nt_proxy* thiz, int type, const struct
     if (ret < 0)
     {
         LOG_D("Make channel failed: (%d) %s.", ret, NT_STRERROR(ret));
-        nt_free(ch);
+        free(ch);
         return ret;
     }
     nt_sockaddr_copy((struct sockaddr*)proxyaddr, (struct sockaddr*)&ch->proxyaddr);
 
-    socks5_action_t* act = nt_malloc(sizeof(socks5_action_t));
+    socks5_action_t* act = malloc(sizeof(socks5_action_t));
     act->type = SOCKS5_ACTION_CREATE_CHANNEL;
     act->u.channel = ch;
 
@@ -1344,7 +1343,7 @@ static int s_socks5_on_cmp_channel(const ev_map_node_t* key1, const ev_map_node_
 static void s_socks5_channel_release(struct nt_proxy* thiz, int channel)
 {
     nt_proxy_socks5_t* socks5 = container_of(thiz, nt_proxy_socks5_t, basis);
-    socks5_action_t*   act = nt_malloc(sizeof(socks5_action_t));
+    socks5_action_t*   act = malloc(sizeof(socks5_action_t));
     act->type = SOCKS5_ACTION_RELEASE_CHANNEL;
     act->u.chid = channel;
 
@@ -1358,7 +1357,7 @@ static void s_socks5_channel_release(struct nt_proxy* thiz, int channel)
 static int s_socks5_create(nt_proxy_t** proxy, const url_comp_t* url)
 {
     int                ret = 0;
-    nt_proxy_socks5_t* socks5 = nt_calloc(1, sizeof(nt_proxy_socks5_t));
+    nt_proxy_socks5_t* socks5 = calloc(1, sizeof(nt_proxy_socks5_t));
     socks5->basis.release = s_nt_proxy_socks5_release;
     socks5->basis.channel_create = s_socks5_channel_create;
     socks5->basis.channel_release = s_socks5_channel_release;
@@ -1405,7 +1404,7 @@ ERR_EPOLL_CREATE:
     s_socks5_release_server_info(socks5);
 ERR_URL_PARSER:
     pthread_mutex_destroy(&socks5->actq_mutex);
-    nt_free(socks5);
+    free(socks5);
     return ret;
 }
 
